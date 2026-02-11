@@ -25,11 +25,16 @@ function onLocationFound(e) {
         .then(data => {
             // Display Tasks (Red)
             data.tasks.forEach(task => {
+                var taskLatLng = L.latLng(task.lat, task.lng);
+                var distance = myLocation.distanceTo(taskLatLng);
+                var distanceKm = (distance / 1000).toFixed(2);
+
                 var popupContent = `
                     <div class="task-popup">
                         <h3>${task.title}</h3>
                         <p><strong>Description:</strong> ${task.description}</p>
                         <p><strong>Reward:</strong> $${task.reward}</p>
+                        <p><strong>Distance:</strong> ${distanceKm} km</p>
                         <hr style="margin: 10px 0; border: 0; border-top: 1px solid #eee;">
                         <form onsubmit="acceptTask(event, ${task.id})">
                             <button type="submit" class="btn-post">Accept Task</button>
