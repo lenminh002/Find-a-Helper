@@ -18,6 +18,37 @@ function onLocationFound(e) {
     myLocation = e.latlng; // Store the coordinates
     L.marker(e.latlng).addTo(map)
         .bindPopup("You are here!").openPopup();
+
+    // Fetch nearby helpers and tasks
+    fetch(`/api/nearby?lat=${e.latlng.lat}&lng=${e.latlng.lng}`)
+        .then(response => response.json())
+        .then(data => {
+            // Display Tasks (Red)
+            data.tasks.forEach(task => {
+                var popupContent = `
+                    <div class="task-popup">
+                        <h3>${task.title}</h3>
+                        <p><strong>Description:</strong> ${task.description}</p>
+                        <p><strong>Reward:</strong> $${task.reward}</p>
+                        <hr style="margin: 10px 0; border: 0; border-top: 1px solid #eee;">
+                        <form onsubmit="acceptTask(event, ${task.id})">
+                            <button type="submit" class="btn-post">Accept Task</button>
+                        </form>
+                    </div>
+                `;
+
+                L.circleMarker([task.lat, task.lng], {
+                    color: 'red',
+                    fillColor: '#f03',
+                    fillOpacity: 0.5,
+                    radius: 10
+                }).addTo(map)
+                    .bindPopup(popupContent);
+            });
+
+
+        })
+        .catch(error => console.error('Error fetching nearby data:', error));
 }
 
 map.on('locationfound', onLocationFound);
@@ -30,24 +61,12 @@ function onLocationError(e) {
 map.on('locationerror', onLocationError);
 
 // 4. Click function with distance calculation
-var popup = L.popup();
+// 4. Click function (Optional or Removed)
+// map.on('click', onMapClick);
 
-function onMapClick(e) {
-    var content = "You clicked the map.";
-
-    if (myLocation) {
-        // Calculate distance in meters
-        var meters = myLocation.distanceTo(e.latlng);
-
-        // Convert to kilometers and round to 2 decimal places
-        var km = (meters / 1000).toFixed(2);
-        content = "This spot is <b>" + km + " km</b> away from you.";
-    }
-
-    popup
-        .setLatLng(e.latlng)
-        .setContent(content)
-        .openOn(map);
+// Dummy function to handle task acceptance
+function acceptTask(event, taskId) {
+    event.preventDefault();
+    alert(`Task ${taskId} accepted! (This is a demo)`);
+    map.closePopup();
 }
-
-map.on('click', onMapClick);
