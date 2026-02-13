@@ -7,6 +7,10 @@ app = Flask(__name__)
 def index():
     return render_template('index.html')
 
+@app.route('/tasks')
+def tasks():
+    return render_template('tasks.html')
+
 @app.route('/api/nearby')
 def get_nearby_data():
     try:

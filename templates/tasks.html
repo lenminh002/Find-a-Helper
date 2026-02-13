@@ -4,12 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <title>Document</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <title>Find a Helper</title>
 </head>
 
 <body>
@@ -22,12 +18,15 @@
             <li class="nav-item"><a href="#">Sign In</a></li>
         </ul>
     </nav>
-    <div id="map"></div>
 
+    <div class="container">
+        <h1>Available Tasks</h1>
+        <div id="task-list" class="task-grid">
+            <!-- Tasks will be dynamically inserted here -->
+        </div>
+    </div>
 
-    <script src="{{ url_for('static', filename='js/map.js') }}"></script>
-
-
+    <script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
 </body>
 
 </html>
