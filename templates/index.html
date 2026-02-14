@@ -10,6 +10,7 @@
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css', v=1) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css', v=1) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chat.css', v=1) }}">
     <title>Find a Helper</title>
 </head>
 
@@ -24,10 +25,35 @@
     </nav>
     <div id="map"></div>
 
+    <!-- AI Chat Widget -->
+    <button id="chat-toggle" class="chat-toggle" title="AI Assistant">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+    </button>
+
+    <div id="chat-panel" class="chat-panel">
+        <div class="chat-header">
+            <div>
+                <div class="chat-header-title">AI Assistant</div>
+                <div class="chat-header-subtitle">Ask me anything about tasks</div>
+            </div>
+            <button id="chat-close" class="chat-close">&times;</button>
+        </div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-area">
+            <input id="chat-input" class="chat-input" type="text" placeholder="Type a message..." autocomplete="off">
+            <button id="chat-send" class="chat-send">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                </svg>
+            </button>
+        </div>
+    </div>
 
     <script src="{{ url_for('static', filename='js/map.js') }}"></script>
-
-
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 </body>
 
 </html>

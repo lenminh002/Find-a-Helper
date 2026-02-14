@@ -4,19 +4,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Settings - Find a Helper</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css', v=1) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css', v=4) }}">
 </head>
 
-<body>
+<body class="dashboard-page">
     <nav class="navbar">
-        <a href="#" class="logo">Find a Helper</a>
+        <a href="{{ url_for('index') }}" class="logo">Find a Helper</a>
         <ul class="nav-links">
             <li class="nav-item"><a href="{{ url_for('index') }}">Home</a></li>
             <li class="nav-item"><a href="{{ url_for('tasks') }}">Tasks</a></li>
             <li class="nav-item"><a href="{{ url_for('userProfile') }}">User Profile</a></li>
         </ul>
     </nav>
+
+    <div class="dashboard-wrapper">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-profile">
+                <img src="https://ui-avatars.com/api/?name={{ user.username }}&background=222&color=fff&size=88"
+                    alt="Avatar" class="sidebar-avatar">
+                <div class="sidebar-user-info">
+                    <div class="sidebar-username" id="sidebar-username">{{ user.username }}</div>
+                    <a href="#" class="sidebar-view-profile">View profile</a>
+                </div>
+            </div>
+
+            <ul class="sidebar-nav">
+                <li><a href="{{ url_for('userProfile') }}" class="active">Settings</a></li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <a href="{{ url_for('logout') }}" id="btn-sign-out" class="btn-sign-out">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                    Sign Out
+                </a>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <h1>Settings</h1>
+
+            <div class="settings-tabs">
+                <a href="#" class="tab-link active">Profile</a>
+                <a href="#" class="tab-link">Personal Info</a>
+                <a href="#" class="tab-link">Login &amp; Security</a>
+            </div>
+
+            <div class="settings-fields">
+                <div class="field-row" data-field="username">
+                    <div class="field-info">
+                        <div class="field-label">Username</div>
+                        <div class="field-value">{{ user.username }}</div>
+                        <div class="field-edit" style="display:none;">
+                            <input type="text" class="field-input" value="{{ user.username }}">
+                            <div class="field-actions">
+                                <button class="btn-save">Save</button>
+                                <button class="btn-cancel">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn-edit">Edit</button>
+                </div>
+
+                <div class="field-row" data-field="bio">
+                    <div class="field-info">
+                        <div class="field-label">Bio</div>
+                        <div class="field-value">{{ user.bio or 'N/A' }}</div>
+                        <div class="field-edit" style="display:none;">
+                            <textarea class="field-input field-textarea">{{ user.bio or '' }}</textarea>
+                            <div class="field-actions">
+                                <button class="btn-save">Save</button>
+                                <button class="btn-cancel">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn-edit">Edit</button>
+                </div>
+
+                <div class="field-row">
+                    <div class="field-info">
+                        <div class="field-label">Joined</div>
+                        <div class="field-value">Member since {{ user.joined_date }}</div>
+                    </div>
+                </div>
+
+                <div class="field-row" data-field="expertise">
+                    <div class="field-info">
+                        <div class="field-label">Expertise</div>
+                        <div class="field-value">{{ user.expertise or 'N/A' }}</div>
+                        <div class="field-edit" style="display:none;">
+                            <input type="text" class="field-input" value="{{ user.expertise or '' }}">
+                            <div class="field-actions">
+                                <button class="btn-save">Save</button>
+                                <button class="btn-cancel">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn-edit">Edit</button>
+                </div>
+
+                <div class="field-row" data-field="role">
+                    <div class="field-info">
+                        <div class="field-label">Role</div>
+                        <div class="field-value">{{ user.role or 'Helper' }}</div>
+                        <div class="field-edit" style="display:none;">
+                            <select class="field-input field-select">
+                                <option value="Helper" {{ 'selected' if user.role=='Helper' else '' }}>Helper</option>
+                                <option value="Requester" {{ 'selected' if user.role=='Requester' else '' }}>Requester
+                                </option>
+                            </select>
+                            <div class="field-actions">
+                                <button class="btn-save">Save</button>
+                                <button class="btn-cancel">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn-edit">Edit</button>
+                </div>
+            </div>
+        </main>
+    </div>
 
     <script src="{{ url_for('static', filename='js/userProfile.js') }}"></script>
 </body>

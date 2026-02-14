@@ -1,8 +1,18 @@
-from flask import Flask, render_template, jsonify, request, g
+from flask import Flask, render_template, jsonify, request, g, session, redirect, url_for
 import random
 import sqlite3
+import datetime
+import os
+import json
+import urllib.request
+
+from dotenv import load_dotenv
+load_dotenv()
+
+import ai_helpers
 
 app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', 'super_secret_key_for_hackathon')
 
 DATABASE = 'database.db'
 
@@ -31,9 +41,28 @@ def init_db():
                 lat REAL,
                 lng REAL,
                 status TEXT DEFAULT 'accepted',
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                original_id INTEGER
             )
         ''')
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                bio TEXT,
+                role TEXT DEFAULT 'Helper',
+                expertise TEXT DEFAULT '',
+                joined_date TEXT
+            )
+        ''')
+        
+        # Seed a dummy user if not exists
+        cur = db.execute('SELECT * FROM users LIMIT 1')
+        if not cur.fetchone():
+            join_date = datetime.datetime.now().strftime("%B %Y")
+            db.execute('INSERT INTO users (username, bio, role, expertise, joined_date) VALUES (?, ?, ?, ?, ?)',
+                       ('AstroHelper', 'Exploring the universe of helpful tasks.', 'Helper', 'Helping, Moving', join_date))
+        
         db.commit()
 
 @app.route('/')
@@ -44,9 +73,61 @@ def index():
 def tasks():
     return render_template('tasks.html')
 
+@app.route('/login')
+def login():
+    # Simple dummy login for demo purposes
+    # Logs in the first user in the DB
+    db = get_db()
+    user = db.execute('SELECT * FROM users LIMIT 1').fetchone()
+    if user:
+        session['user_id'] = user['id']
+        return redirect(url_for('userProfile'))
+    return "No users found to login.", 404
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('index'))
+
 @app.route('/profile')
 def userProfile():
-    return render_template('userProfile.html')
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    db = get_db()
+    user = db.execute('SELECT * FROM users WHERE id = ?', (session['user_id'],)).fetchone()
+    
+    if not user:
+         session.clear()
+         return redirect(url_for('login'))
+
+    return render_template('userProfile.html', user=user)
+
+@app.route('/api/update_profile', methods=['POST'])
+def update_profile():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    field = data.get('field')
+    value = data.get('value', '').strip()
+    
+    allowed_fields = ['username', 'bio', 'role', 'expertise']
+    if field not in allowed_fields:
+        return jsonify({'error': 'Invalid field'}), 400
+    
+    # Validate role
+    if field == 'role' and value not in ['Helper', 'Requester']:
+        return jsonify({'error': 'Invalid role'}), 400
+    
+    db = get_db()
+    db.execute(f'UPDATE users SET {field} = ? WHERE id = ?', (value, session['user_id']))
+    db.commit()
+    
+    return jsonify({'message': 'Profile updated', 'field': field, 'value': value}), 200
 
 @app.route('/api/nearby')
 def get_nearby_data():
@@ -110,23 +191,6 @@ def get_nearby_data():
 # Structure: {id, title, desc, reward, lat, lng}
 USER_TASKS = []
 
-@app.route('/api/tasks', methods=['POST'])
-def add_task():
-    data = request.json
-    if not data:
-        return jsonify({'error': 'No data provided'}), 400
-
-    new_task = {
-        'id': len(USER_TASKS) + 100, # Offset ID to avoid conflict with dummy tasks
-        'title': data.get('title'),
-        'description': data.get('description'),
-        'reward': data.get('reward'),
-        'lat': data.get('lat'),
-        'lng': data.get('lng'),
-        'type': 'user_task'
-    }
-    USER_TASKS.append(new_task)
-    return jsonify({'message': 'Task added successfully', 'task': new_task}), 201
 
 @app.route('/api/accept_task', methods=['POST'])
 def accept_task():
@@ -187,6 +251,55 @@ def delete_task(task_id):
     db.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
     db.commit()
     return jsonify({'message': 'Task deleted successfully'}), 200
+
+@app.route('/api/chat', methods=['POST'])
+def api_chat():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    data = request.json
+    if not data or 'message' not in data:
+        return jsonify({'error': 'No message provided'}), 400
+
+    user_message = data['message'].strip()
+    if not user_message:
+        return jsonify({'error': 'Empty message'}), 400
+
+    # Get conversation history from session
+    history = session.get('chat_history', [])
+
+    # Call the AI
+    reply = ai_helpers.chat(user_message, session['user_id'], history)
+
+    # Save to session history
+    history.append({'role': 'user', 'content': user_message})
+    history.append({'role': 'assistant', 'content': reply})
+    session['chat_history'] = history[-10:]  # Keep last 10 messages
+
+    return jsonify({'reply': reply}), 200
+
+@app.route('/api/geolocate')
+def geolocate():
+    """Get user's approximate location from their IP address."""
+    try:
+        # Use ip-api.com (free, no key needed, 45 req/min)
+        url = 'http://ip-api.com/json/?fields=status,lat,lon,city,regionName'
+        req = urllib.request.Request(url, headers={'User-Agent': 'FindAHelper/1.0'})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+        
+        if data.get('status') == 'success':
+            return jsonify({
+                'lat': data['lat'],
+                'lng': data['lon'],
+                'city': data.get('city', ''),
+                'region': data.get('regionName', '')
+            })
+        
+        return jsonify({'error': 'Could not determine location'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     init_db()

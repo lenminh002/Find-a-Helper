@@ -14,24 +14,26 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 let availableTasks = {};
 let markers = {}; // Store references to task markers
 
-// 2. Ask the browser for your location
-map.locate({ setView: true, });
+// 2. Set up location with the map
+function initLocation(lat, lng, source) {
+    var latlng = L.latLng(lat, lng);
+    myLocation = latlng;
+    localStorage.setItem('userLocation', JSON.stringify(myLocation));
 
-// 3. What to do when the location is found
-function onLocationFound(e) {
-    myLocation = e.latlng; // Store the coordinates
-    localStorage.setItem('userLocation', JSON.stringify(myLocation)); // Save for Tasks page
+    map.setView(latlng, 14);
 
-    L.marker(e.latlng).addTo(map)
+    L.marker(latlng).addTo(map)
         .bindPopup("You are here!").openPopup();
 
-    // Fetch nearby helpers and tasks
-    fetch(`/api/nearby?lat=${e.latlng.lat}&lng=${e.latlng.lng}`)
+    loadNearbyTasks(latlng);
+}
+
+function loadNearbyTasks(latlng) {
+    fetch(`/api/nearby?lat=${latlng.lat}&lng=${latlng.lng}`)
         .then(response => response.json())
         .then(data => {
-            // Display Tasks (Red)
             data.tasks.forEach(task => {
-                availableTasks[task.id] = task; // Store for access in acceptTask
+                availableTasks[task.id] = task;
 
                 var taskLatLng = L.latLng(task.lat, task.lng);
                 var distance = myLocation.distanceTo(taskLatLng);
@@ -56,22 +58,35 @@ function onLocationFound(e) {
                 }).addTo(map)
                     .bindPopup(popupContent);
 
-                markers[task.id] = marker; // Store marker reference
+                markers[task.id] = marker;
             });
-
-
         })
         .catch(error => console.error('Error fetching nearby data:', error));
 }
 
-map.on('locationfound', onLocationFound);
+// 3. Try browser geolocation first
+map.on('locationfound', function (e) {
+    initLocation(e.latlng.lat, e.latlng.lng, 'browser');
+});
 
-function onLocationError(e) {
-    alert("Location access denied or unavailable: " + e.message);
-    map.setView([51.505, -0.09], 13);
-}
+map.on('locationerror', function (e) {
+    console.warn('Browser geolocation failed, trying IP-based fallback...');
+    // Fallback: get location from server via IP geolocation
+    fetch('/api/geolocate')
+        .then(response => response.json())
+        .then(data => {
+            if (data.lat && data.lng) {
+                initLocation(data.lat, data.lng, 'ip');
+            } else {
+                console.error('IP geolocation failed too');
+            }
+        })
+        .catch(err => {
+            console.error('All geolocation methods failed:', err);
+        });
+});
 
-map.on('locationerror', onLocationError);
+map.locate({ setView: false });
 
 // 4. Click function with distance calculation
 // 4. Click function (Optional or Removed)
