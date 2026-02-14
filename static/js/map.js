@@ -105,7 +105,7 @@ function acceptTask(event, taskId) {
     })
         .then(response => response.json())
         .then(data => {
-            alert(`Task accepted and saved!`);
+
             map.closePopup();
 
             // Remove marker from map

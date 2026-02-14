@@ -44,6 +44,10 @@ def index():
 def tasks():
     return render_template('tasks.html')
 
+@app.route('/profile')
+def userProfile():
+    return render_template('userProfile.html')
+
 @app.route('/api/nearby')
 def get_nearby_data():
     try:
