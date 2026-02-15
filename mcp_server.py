@@ -259,7 +259,8 @@ Respond in JSON format:
             if not tasks:
                  return [types.TextContent(type="text", text=json.dumps({"message": "No tasks available to recommend."}))]
             
-            tasks_subset = tasks[:20] 
+            # Send all tasks to AI
+            tasks_subset = tasks 
             
             try:
                 from openai import OpenAI

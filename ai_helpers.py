@@ -6,6 +6,7 @@ import os
 import sqlite3
 import json
 import math
+import re
 
 DATABASE = 'database.db'
 
@@ -222,9 +223,8 @@ def execute_tool(name, arguments, user_id=None):
         if not tasks:
              return json.dumps({"message": "No tasks available to recommend."})
         
-        # Use simple scoring or LLM if list is small enough.
-        # We will use LLM for smart matching.
-        tasks_subset = tasks[:20] # Analyze top 20 tasks
+        # Send all tasks to AI so it can see everything (free tasks, high-pay, etc.)
+        tasks_subset = tasks
         
         try:
             from openai import OpenAI
@@ -435,7 +435,7 @@ IMPORTANT — Tool usage rules:
 IMPORTANT — Presenting tasks:
 - Since interactive cards are shown below your message, KEEP YOUR TEXT RESPONSE VERY BRIEF.
 - Do NOT list all details (reward, distance, description) in the text. Just mention the top 1-2 matches by title and why they fit.
-- Use only the task TITLE (e.g. "Grocery Run"). Do not include IDs like [ID:3].
+- CRITICAL: After EVERY task you mention, add a hidden marker [TASK:map_id] using the task's map_id. Example: "Moving Help - Weekend ($70) [TASK:26]". This marker links your text to the correct card. The user will NOT see these markers.
 - Let the user know they can click "Show on Map" on the cards below.
 
 IMPORTANT — Recommendation rules:
@@ -491,6 +491,9 @@ def chat(user_message, user_id, conversation_history=None, user_lat=None, user_l
 
         highlight_task_id = None
         found_tasks = []
+        # Only skip card filtering when user explicitly asks for ALL tasks
+        user_wants_all = any(phrase in user_message.lower() for phrase in
+            ['all tasks', 'every task', 'everything available', 'list all', 'show all', 'all available'])
 
         # First call — may return tool calls
         response = client.chat.completions.create(
@@ -519,6 +522,7 @@ def chat(user_message, user_id, conversation_history=None, user_lat=None, user_l
                     if parsed.get("results"):
                         found_tasks = parsed["results"]
 
+
                 # Track highlighted task
                 if fn_name == "highlight_task":
                     parsed = json.loads(result)
@@ -541,6 +545,51 @@ def chat(user_message, user_id, conversation_history=None, user_lat=None, user_l
             choice = response.choices[0]
 
         reply = choice.message.content or "I found the task for you on the map!"
+
+        # ── Filter found_tasks to match only what the AI mentioned ──
+        if found_tasks and reply and not user_wants_all:
+            # Layer 1: Try hidden [TASK:id] markers (most accurate)
+            mentioned_ids = [int(x) for x in re.findall(r'\[TASK:(\d+)\]', reply)]
+            if mentioned_ids:
+                found_tasks = [t for t in found_tasks if (t.get('map_id') or t.get('id')) in mentioned_ids]
+            else:
+                # Layer 2: Title+reward matching (longest-first to avoid substring issues)
+                sorted_tasks = sorted(found_tasks, key=lambda t: len(t.get('title', '')), reverse=True)
+                matched = []
+                matched_titles = set()
+
+                for task in sorted_tasks:
+                    title = task.get('title', '')
+                    reward = task.get('reward', 0)
+                    if not title or title not in reply:
+                        continue
+
+                    # Skip if this title is a substring of an already-matched longer title
+                    # e.g. skip "Tutoring" if "Tutoring - Urgent" was already matched
+                    if any(title != mt and title in mt for mt in matched_titles):
+                        continue
+
+                    # For same-title tasks (different rewards), prefer the one whose reward is in text
+                    reward_in_text = (f"${reward}" in reply or f"${int(reward)}" in reply)
+                    if title in matched_titles:
+                        if reward_in_text:
+                            matched = [m for m in matched if m.get('title') != title]
+                            matched.append(task)
+                        continue
+
+                    matched_titles.add(title)
+                    matched.append(task)
+
+                if matched:
+                    # Sort cards by their order of appearance in AI reply
+                    matched.sort(key=lambda t: reply.find(t['title']))
+                    found_tasks = matched
+                else:
+                    # Layer 3: No title matches at all — cap at 5
+                    found_tasks = found_tasks[:5]
+
+        # Always strip hidden markers from the displayed reply
+        reply = re.sub(r'\s*\[TASK:\d+\]', '', reply)
 
         return {"reply": reply, "highlight_task_id": highlight_task_id, "found_tasks": found_tasks}
 
