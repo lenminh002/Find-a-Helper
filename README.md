@@ -1,11 +1,11 @@
-About the app:
+**About the app:**
 - Find a Helper is a web application that offers a platform for users to post tasks they need help with and for helpers to find tasks they can do with AI integrated to help them with their tasks.
 
-How to run program:
+**How to run program:**
 - Install dependencies: pip install -r requirements.txt
 - Add .env file with OPENAI_API_KEY=your_openai_api_key
 - Run python app.py on Windows or python3 app.py on Mac
-Note: Don't need to create database.db manually, it will be created automatically with init_db() in app.py
+- *Note*: Don't need to create database.db manually, it will be created automatically with init_db() in app.py
 
 AI functionality:
 
