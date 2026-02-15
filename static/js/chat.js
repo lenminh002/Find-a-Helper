@@ -86,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
             card.dataset.taskId = taskId;
             card.innerHTML = `
                 <div class="task-card-header">
-                    <span class="task-card-title">${escapeHtml(task.title)}</span>
+                    <span class="task-card-title">#${taskId} ${escapeHtml(task.title)}</span>
                     <span class="task-card-reward">$${task.reward}</span>
                 </div>
                 <div class="task-card-desc">${escapeHtml(task.description || task.desc || '')}</div>
@@ -119,10 +119,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const typingEl = appendMessage('Thinking...', 'typing', false);
 
         try {
+            // Get user location from localStorage (saved by map.js)
+            const locData = JSON.parse(localStorage.getItem('userLocation') || '{}');
+            const payload = { message: text };
+            if (locData.lat && locData.lng) {
+                payload.user_lat = locData.lat;
+                payload.user_lng = locData.lng;
+            }
+
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: text })
+                body: JSON.stringify(payload)
             });
 
             typingEl.remove();

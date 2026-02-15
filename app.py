@@ -163,30 +163,47 @@ def get_nearby_data():
     cur = db.execute('SELECT original_id FROM tasks')
     accepted_ids = {row['original_id'] for row in cur.fetchall() if row['original_id'] is not None}
 
-    # Generate dummy tasks
+    # 20 unique task templates — each with a distinct title + description
     task_templates = [
-        {"title": "Move Couch", "reward": 50, "desc": "Need help moving a couch to the second floor."},
-        {"title": "Grocery Run", "reward": 25, "desc": "Pick up groceries from Whole Foods."},
-        {"title": "Dog Walking", "reward": 20, "desc": "Walk my golden retriever for 30 mins."},
-        {"title": "Assemble Furniture", "reward": 40, "desc": "Assemble an IKEA desk."},
-        {"title": "Yard Work", "reward": 35, "desc": "Rake leaves in the backyard."},
-        {"title": "Tech Support", "reward": 30, "desc": "Help setting up a new printer."},
-        {"title": "Cat Sitting", "reward": 45, "desc": "Feed my cat while I'm away for the weekend."},
-        {"title": "Car Wash", "reward": 20, "desc": "Wash my sedan in the driveway."},
-        {"title": "Tutoring", "reward": 40, "desc": "Algebra tutoring for 8th grader."},
-        {"title": "Lift Heavy Boxes", "reward": 15, "desc": "Help move 5 boxes to the garage."},
+        {"title": "Move Couch",           "reward": 50, "desc": "Need help moving a couch to the second floor."},
+        {"title": "Grocery Run",          "reward": 25, "desc": "Pick up groceries from Whole Foods."},
+        {"title": "Dog Walking",          "reward": 20, "desc": "Walk my golden retriever for 30 mins."},
+        {"title": "Assemble Furniture",   "reward": 40, "desc": "Assemble an IKEA desk."},
+        {"title": "Yard Work",            "reward": 35, "desc": "Rake leaves in the backyard."},
+        {"title": "Tech Support",         "reward": 30, "desc": "Help setting up a new printer."},
+        {"title": "Cat Sitting",          "reward": 45, "desc": "Feed my cat while I'm away for the weekend."},
+        {"title": "Car Wash",             "reward": 20, "desc": "Wash my sedan in the driveway."},
+        {"title": "Tutoring",             "reward": 40, "desc": "Algebra tutoring for 8th grader."},
+        {"title": "Lift Heavy Boxes",     "reward": 15, "desc": "Help move 5 boxes to the garage."},
+        {"title": "Move Dining Table",    "reward": 45, "desc": "Help relocate a dining table to a new apartment."},
+        {"title": "Pharmacy Pickup",      "reward": 15, "desc": "Pick up a prescription from CVS."},
+        {"title": "Walk Two Huskies",     "reward": 30, "desc": "Walk two huskies around the park for 45 mins."},
+        {"title": "Mount TV",             "reward": 35, "desc": "Mount a 55-inch TV on a living room wall."},
+        {"title": "Garden Weeding",       "reward": 25, "desc": "Weed the front garden beds and trim hedges."},
+        {"title": "WiFi Setup",           "reward": 25, "desc": "Set up a new mesh WiFi system at home."},
+        {"title": "Pet Sitting",          "reward": 40, "desc": "Watch my two dogs overnight while I travel."},
+        {"title": "Bike Repair",          "reward": 20, "desc": "Fix a flat tire and adjust brakes on my bike."},
+        {"title": "Math Tutoring",        "reward": 35, "desc": "Help with calculus homework for a college student."},
+        {"title": "Garage Cleanup",       "reward": 30, "desc": "Help organize and clean out a cluttered garage."},
     ]
 
+    # Seed based on rounded location so tasks are stable for the same area
+    location_seed = int(round(lat, 2) * 10000 + round(lng, 2) * 10000)
+    rng = random.Random(location_seed)
+
+    # Shuffle templates deterministically and assign to task IDs 1-20
+    shuffled = list(range(len(task_templates)))
+    rng.shuffle(shuffled)
+
     for i in range(20):
-        # Skip if tasks with this ID (1-20) are already accepted
         if (i + 1) in accepted_ids:
             continue
 
-        template = random.choice(task_templates)
-        # Random offset within ~2km
-        offset_lat = random.uniform(-0.02, 0.02)
-        offset_lng = random.uniform(-0.02, 0.02)
-        
+        template = task_templates[shuffled[i]]
+        # Deterministic offset within ~2km
+        offset_lat = rng.uniform(-0.02, 0.02)
+        offset_lng = rng.uniform(-0.02, 0.02)
+
         tasks.append({
             "id": i + 1,
             "title": template["title"],
@@ -287,6 +304,10 @@ def api_chat():
     if not user_message:
         return jsonify({'error': 'Empty message'}), 400
 
+    # Extract user location (sent by chat.js from localStorage)
+    user_lat = data.get('user_lat')
+    user_lng = data.get('user_lng')
+
     db = get_db()
 
     # Get conversation history from DB (last 10 messages)
@@ -296,7 +317,7 @@ def api_chat():
     history = [{'role': row['role'], 'content': row['content']} for row in reversed(rows)]
 
     # Call the AI with function calling
-    result = ai_helpers.chat(user_message, user_id, history)
+    result = ai_helpers.chat(user_message, user_id, history, user_lat=user_lat, user_lng=user_lng)
 
     # Save to DB
     db.execute('INSERT INTO chat_messages (user_id, role, content) VALUES (?, ?, ?)', (user_id, 'user', user_message))

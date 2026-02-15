@@ -5,8 +5,12 @@ AI Helper module — wraps the OpenAI API with function calling for task search.
 import os
 import sqlite3
 import json
+import math
 
 DATABASE = 'database.db'
+
+# Module-level user location — set per request by chat()
+_user_location = {"lat": None, "lng": None}
 
 
 def _query_db(query, args=(), one=False):
@@ -19,6 +23,28 @@ def _query_db(query, args=(), one=False):
     if one:
         return dict(rows[0]) if rows else None
     return [dict(r) for r in rows]
+
+
+def haversine(lat1, lng1, lat2, lng2):
+    """Calculate the great-circle distance (km) between two points."""
+    R = 6371  # Earth radius in km
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = (math.sin(dlat / 2) ** 2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+         math.sin(dlng / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _add_distances(tasks):
+    """Add distance_km to each task dict if user location is known."""
+    ulat, ulng = _user_location["lat"], _user_location["lng"]
+    if ulat is None or ulng is None:
+        return tasks
+    for t in tasks:
+        if t.get("lat") is not None and t.get("lng") is not None:
+            t["distance_km"] = round(haversine(ulat, ulng, t["lat"], t["lng"]), 2)
+    return tasks
 
 
 def get_user_context(user_id):
@@ -47,13 +73,18 @@ def get_tasks_context():
 
 
 def get_available_tasks_context():
-    """Get currently available tasks from the map."""
-    tasks = _query_db('SELECT map_id, title, description, reward FROM available_tasks ORDER BY map_id')
+    """Get currently available tasks from the map, with distances if known."""
+    tasks = _query_db('SELECT map_id, title, description, reward, lat, lng FROM available_tasks ORDER BY map_id')
     if not tasks:
         return "No available tasks on the map right now."
+    tasks = _add_distances(tasks)
+    # Sort by distance if available
+    if tasks and "distance_km" in tasks[0]:
+        tasks.sort(key=lambda t: t.get("distance_km", 999))
     lines = []
     for t in tasks:
-        lines.append(f"- [ID:{t['map_id']}] {t['title']} (${t['reward']}) — {t['description']}")
+        dist_str = f" [{t['distance_km']} km away]" if "distance_km" in t else ""
+        lines.append(f"- [ID:{t['map_id']}] {t['title']} (${t['reward']}){dist_str} — {t['description']}")
     return f"Available tasks on the map ({len(tasks)} total):\n" + "\n".join(lines)
 
 
@@ -64,7 +95,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "search_available_tasks",
-            "description": "Search for available tasks on the map by keyword. Returns matching tasks with their IDs, titles, descriptions, and rewards.",
+            "description": "Search for available tasks on the map by keyword. Returns matching tasks with their IDs, titles, descriptions, rewards, and distances.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -80,8 +111,29 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "search_nearby_tasks",
+            "description": "Search for tasks within a given radius (km) of the user's location. Use this when the user asks for nearby tasks, tasks within a distance, or closest tasks. Returns tasks sorted by distance.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "radius_km": {
+                        "type": "number",
+                        "description": "Maximum distance in kilometers from the user's location (e.g. 1, 2, 5). Defaults to 2 if not specified."
+                    },
+                    "keyword": {
+                        "type": "string",
+                        "description": "Optional keyword to filter tasks by title or description"
+                    }
+                },
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_all_tasks",
-            "description": "List all currently available tasks on the map. Use this when the user asks what tasks are available, or wants to see all options.",
+            "description": "List all currently available tasks on the map sorted by distance. Use this when the user asks what tasks are available, or wants to see all options.",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -131,15 +183,52 @@ def execute_tool(name, arguments):
     if name == "search_available_tasks":
         keyword = arguments.get("keyword", "")
         tasks = _query_db(
-            "SELECT map_id, title, description, reward FROM available_tasks WHERE title LIKE ? OR description LIKE ?",
+            "SELECT map_id, title, description, reward, lat, lng FROM available_tasks WHERE title LIKE ? OR description LIKE ?",
             (f"%{keyword}%", f"%{keyword}%")
         )
+        tasks = _add_distances(tasks)
+        if tasks and "distance_km" in tasks[0]:
+            tasks.sort(key=lambda t: t.get("distance_km", 999))
         if not tasks:
             return json.dumps({"results": [], "message": f"No tasks found matching '{keyword}'"})
         return json.dumps({"results": tasks, "message": f"Found {len(tasks)} task(s) matching '{keyword}'"})
 
+    elif name == "search_nearby_tasks":
+        radius_km = arguments.get("radius_km", 2)
+        keyword = arguments.get("keyword", "")
+
+        if _user_location["lat"] is None:
+            return json.dumps({"results": [], "message": "User location not available. Cannot search by distance."})
+
+        if keyword:
+            tasks = _query_db(
+                "SELECT map_id, title, description, reward, lat, lng FROM available_tasks WHERE title LIKE ? OR description LIKE ?",
+                (f"%{keyword}%", f"%{keyword}%")
+            )
+        else:
+            tasks = _query_db("SELECT map_id, title, description, reward, lat, lng FROM available_tasks")
+
+        tasks = _add_distances(tasks)
+        # Filter by radius
+        tasks = [t for t in tasks if t.get("distance_km", 999) <= radius_km]
+        # Sort by distance
+        tasks.sort(key=lambda t: t.get("distance_km", 999))
+
+        if not tasks:
+            return json.dumps({
+                "results": [],
+                "message": f"No tasks found within {radius_km} km" + (f" matching '{keyword}'" if keyword else "")
+            })
+        return json.dumps({
+            "results": tasks,
+            "message": f"Found {len(tasks)} task(s) within {radius_km} km" + (f" matching '{keyword}'" if keyword else "")
+        })
+
     elif name == "list_all_tasks":
-        tasks = _query_db("SELECT map_id, title, description, reward FROM available_tasks ORDER BY map_id")
+        tasks = _query_db("SELECT map_id, title, description, reward, lat, lng FROM available_tasks ORDER BY map_id")
+        tasks = _add_distances(tasks)
+        if tasks and "distance_km" in tasks[0]:
+            tasks.sort(key=lambda t: t.get("distance_km", 999))
         if not tasks:
             return json.dumps({"results": [], "message": "No tasks currently available on the map."})
         return json.dumps({"results": tasks, "message": f"{len(tasks)} task(s) currently available"})
@@ -151,11 +240,8 @@ def execute_tool(name, arguments):
             return json.dumps({"highlighted": True, "task": task})
         return json.dumps({"highlighted": False, "message": "Task not found on map"})
 
-
-
     elif name == "suggest_price":
         task_type = arguments.get("task_type", "").lower()
-        # Simple price lookup based on common task types (ported from mcp_server.py)
         price_guide = {
             "moving": {"min": 30, "max": 60, "typical": 50},
             "grocery": {"min": 15, "max": 30, "typical": 25},
@@ -194,9 +280,18 @@ Your role:
 IMPORTANT — Tool usage rules:
 - When a user asks about available tasks, mentions wanting to find work, or asks "what tasks are there?", ALWAYS use your tools.
 - Use search_available_tasks when they mention a specific type (e.g. "find me yard work", "dog walking tasks").
+- Use search_nearby_tasks when they mention distance, radius, nearby, closest, or "within X km" (e.g. "tasks within 1km", "nearest tasks", "what's close to me").
 - Use list_all_tasks when they ask generally (e.g. "what tasks are available?", "show me tasks").
 - After finding tasks, use highlight_task to show the best match on the map.
 - The task results will be shown as interactive cards in the chat. Summarize what you found briefly.
+
+IMPORTANT — Presenting tasks:
+- Every task has a unique map ID (e.g. [ID:3]). ALWAYS include the map ID when mentioning a task.
+- Each task result includes a distance_km field showing how far it is from the user. ALWAYS mention the distance.
+- Present each task with its UNIQUE details: title, description, reward, and distance.
+- If two tasks have similar titles, emphasize how they differ (different description, reward, or ID).
+- NEVER list the same task info twice. Each entry must be distinguishable.
+- When the user asks for tasks within a specific radius, ONLY show tasks that are actually within that radius. If none exist, say so clearly.
 
 You also have context about the user's profile and their accepted tasks.
 
@@ -211,6 +306,10 @@ def build_messages(user_message, user_id, conversation_history=None):
         f"{get_available_tasks_context()}"
     )
 
+    # Add user location info to context if available
+    if _user_location["lat"] is not None:
+        context += f"\n\nUser's current location: lat={_user_location['lat']}, lng={_user_location['lng']}"
+
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT + "\n\n--- Context ---\n" + context}
     ]
@@ -224,8 +323,12 @@ def build_messages(user_message, user_id, conversation_history=None):
     return messages
 
 
-def chat(user_message, user_id, conversation_history=None):
+def chat(user_message, user_id, conversation_history=None, user_lat=None, user_lng=None):
     """Send a message to the LLM with function calling and get a response."""
+    # Set user location for this request
+    _user_location["lat"] = user_lat
+    _user_location["lng"] = user_lng
+
     try:
         from openai import OpenAI
 
@@ -261,7 +364,7 @@ def chat(user_message, user_id, conversation_history=None):
                 result = execute_tool(fn_name, fn_args)
 
                 # Track found tasks from search
-                if fn_name in ("search_available_tasks", "list_all_tasks"):
+                if fn_name in ("search_available_tasks", "list_all_tasks", "search_nearby_tasks"):
                     parsed = json.loads(result)
                     if parsed.get("results"):
                         found_tasks = parsed["results"]
