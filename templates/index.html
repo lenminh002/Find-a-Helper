@@ -16,7 +16,7 @@
 
 <body>
     <nav class="navbar">
-        <a href="#" class="logo">Find a Helper</a>
+        <a href="{{ url_for('index') }}" class="logo">Find a Helper</a>
         <ul class="nav-links">
             <li class="nav-item"><a href="{{ url_for('index') }}">Home</a></li>
             <li class="nav-item"><a href="{{ url_for('tasks') }}">Tasks</a></li>
@@ -39,7 +39,16 @@
                 <div class="chat-header-title">AI Assistant</div>
                 <div class="chat-header-subtitle">Ask me anything about tasks</div>
             </div>
-            <button id="chat-close" class="chat-close">&times;</button>
+            <div class="chat-header-actions">
+                <button id="chat-clear" class="chat-clear" title="Clear chat">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
+                <button id="chat-close" class="chat-close">&times;</button>
+            </div>
         </div>
         <div id="chat-messages" class="chat-messages"></div>
         <div class="chat-input-area">
@@ -52,6 +61,8 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
     <script src="{{ url_for('static', filename='js/map.js') }}"></script>
     <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 </body>

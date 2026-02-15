@@ -55,6 +55,25 @@ def init_db():
                 joined_date TEXT
             )
         ''')
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS available_tasks (
+                map_id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                reward REAL,
+                lat REAL,
+                lng REAL
+            )
+        ''')
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         
         # Seed a dummy user if not exists
         cur = db.execute('SELECT * FROM users LIMIT 1')
@@ -178,18 +197,25 @@ def get_nearby_data():
             "type": "task"
         })
 
-    # Add user posted tasks (in-memory) to the map
-    # Filter user tasks too
-    for task in USER_TASKS:
-        if task['id'] not in accepted_ids:
-            tasks.append(task)
-
     return jsonify({'tasks': tasks})
 
 
-# In-memory storage for user-created tasks (Available tasks)
-# Structure: {id, title, desc, reward, lat, lng}
-USER_TASKS = []
+@app.route('/api/store_available_tasks', methods=['POST'])
+def store_available_tasks():
+    """Store the currently visible map tasks so the AI can query them."""
+    data = request.json
+    if not data or 'tasks' not in data:
+        return jsonify({'error': 'No tasks provided'}), 400
+    
+    db = get_db()
+    db.execute('DELETE FROM available_tasks')  # Clear old tasks
+    for task in data['tasks']:
+        db.execute(
+            'INSERT OR REPLACE INTO available_tasks (map_id, title, description, reward, lat, lng) VALUES (?, ?, ?, ?, ?, ?)',
+            (task['id'], task['title'], task.get('description', ''), task.get('reward', 0), task.get('lat', 0), task.get('lng', 0))
+        )
+    db.commit()
+    return jsonify({'message': f'Stored {len(data["tasks"])} tasks'}), 200
 
 
 @app.route('/api/accept_task', methods=['POST'])
@@ -240,10 +266,6 @@ def get_my_tasks():
     return jsonify({'tasks': tasks})
 
 
-# Deprecated: usage for "All Tasks"
-@app.route('/api/all_tasks', methods=['GET'])
-def get_all_tasks():
-    return jsonify({'tasks': USER_TASKS})
 
 @app.route('/api/delete_task/<int:task_id>', methods=['DELETE'])
 def delete_task(task_id):
@@ -254,8 +276,8 @@ def delete_task(task_id):
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
-    if 'user_id' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
+    # Auto-assign demo user if not logged in (hackathon convenience)
+    user_id = session.get('user_id', 1)
 
     data = request.json
     if not data or 'message' not in data:
@@ -265,18 +287,49 @@ def api_chat():
     if not user_message:
         return jsonify({'error': 'Empty message'}), 400
 
-    # Get conversation history from session
-    history = session.get('chat_history', [])
+    db = get_db()
 
-    # Call the AI
-    reply = ai_helpers.chat(user_message, session['user_id'], history)
+    # Get conversation history from DB (last 10 messages)
+    cur = db.execute('SELECT role, content FROM chat_messages WHERE user_id = ? ORDER BY id DESC LIMIT 10', (user_id,))
+    rows = cur.fetchall()
+    # Reverse to chronological order for the AI context
+    history = [{'role': row['role'], 'content': row['content']} for row in reversed(rows)]
 
-    # Save to session history
-    history.append({'role': 'user', 'content': user_message})
-    history.append({'role': 'assistant', 'content': reply})
-    session['chat_history'] = history[-10:]  # Keep last 10 messages
+    # Call the AI with function calling
+    result = ai_helpers.chat(user_message, user_id, history)
 
-    return jsonify({'reply': reply}), 200
+    # Save to DB
+    db.execute('INSERT INTO chat_messages (user_id, role, content) VALUES (?, ?, ?)', (user_id, 'user', user_message))
+    db.execute('INSERT INTO chat_messages (user_id, role, content) VALUES (?, ?, ?)', (user_id, 'assistant', result['reply']))
+    db.commit()
+
+    return jsonify(result), 200
+
+
+@app.route('/api/chat/history', methods=['GET'])
+def get_chat_history():
+    user_id = session.get('user_id', 1)
+    db = get_db()
+    cur = db.execute('SELECT role, content, timestamp FROM chat_messages WHERE user_id = ? ORDER BY id ASC', (user_id,))
+    rows = cur.fetchall()
+    
+    history = []
+    for row in rows:
+        history.append({
+            'role': row['role'],
+            'content': row['content'],
+            'timestamp': row['timestamp']
+        })
+    return jsonify({'history': history})
+
+
+@app.route('/api/clear_chat', methods=['POST'])
+def clear_chat():
+    user_id = session.get('user_id', 1)
+    db = get_db()
+    db.execute('DELETE FROM chat_messages WHERE user_id = ?', (user_id,))
+    db.commit()
+    return jsonify({'message': 'Chat history cleared'}), 200
 
 @app.route('/api/geolocate')
 def geolocate():
@@ -303,4 +356,4 @@ def geolocate():
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    app.run(debug=True, port=5001)

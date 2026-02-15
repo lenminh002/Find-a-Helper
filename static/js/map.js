@@ -60,6 +60,13 @@ function loadNearbyTasks(latlng) {
 
                 markers[task.id] = marker;
             });
+
+            // Store tasks in backend so the AI can search them
+            fetch('/api/store_available_tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tasks: data.tasks })
+            }).catch(err => console.warn('Could not store tasks for AI:', err));
         })
         .catch(error => console.error('Error fetching nearby data:', error));
 }
@@ -88,9 +95,14 @@ map.on('locationerror', function (e) {
 
 map.locate({ setView: false });
 
-// 4. Click function with distance calculation
-// 4. Click function (Optional or Removed)
-// map.on('click', onMapClick);
+// Expose highlightTask for the AI chat to call
+window.highlightTask = function (taskId) {
+    var marker = markers[taskId];
+    if (marker) {
+        map.setView(marker.getLatLng(), 16);
+        marker.openPopup();
+    }
+};
 
 // Handle task acceptance and save to DB
 function acceptTask(event, taskId) {
