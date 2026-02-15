@@ -14,9 +14,11 @@ AI functionality:
     - Ask the AI: "What tasks should I do?" or "Find me work".
     - It should return a ranked list with reasons why each task fits you.]
 
-
+- Conversational Task Creation
+    - Example: "I need help moving a couch this Saturday"
+    - AI will create a task with title, description, reward and will ask for more information if needed before posting.
+    
 Idea:
-- Conversational Task Creation (for Requesters)
 - AI Profile Optimizer
 - Safety & Content Moderation
 - Multilingual Translation & Support

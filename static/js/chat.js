@@ -107,6 +107,77 @@ document.addEventListener('DOMContentLoaded', () => {
         return div.innerHTML;
     }
 
+    // --- Task Proposal Card (Conversational Creation) ---
+    function renderTaskProposal(proposal) {
+        if (!proposal || !proposal.title) return;
+
+        const card = document.createElement('div');
+        card.className = 'task-proposal-card';
+        card.innerHTML = `
+            <div class="proposal-header">Task Proposal</div>
+            <div class="proposal-detail"><strong>Title:</strong> ${escapeHtml(proposal.title)}</div>
+            <div class="proposal-detail"><strong>Description:</strong> ${escapeHtml(proposal.description || '')}</div>
+            <div class="proposal-detail"><strong>Reward:</strong> $${proposal.reward || 0}</div>
+            <div class="proposal-actions">
+                <button class="proposal-confirm">Confirm & Post</button>
+                <button class="proposal-reject">Reject</button>
+            </div>
+        `;
+
+        // Confirm button
+        card.querySelector('.proposal-confirm').addEventListener('click', () => {
+            const locData = JSON.parse(localStorage.getItem('userLocation') || '{}');
+            let lat = locData.lat, lng = locData.lng;
+
+            if (!lat || !lng) {
+                if (typeof map !== 'undefined') {
+                    const center = map.getCenter();
+                    lat = center.lat;
+                    lng = center.lng;
+                } else {
+                    alert('Cannot determine location. Please allow location access.');
+                    return;
+                }
+            }
+
+            fetch('/api/post_task', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: proposal.title,
+                    description: proposal.description || '',
+                    reward: proposal.reward || 0,
+                    lat: lat,
+                    lng: lng
+                })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        card.innerHTML = '<div class="proposal-success">Task posted! Look for the green marker on the map.</div>';
+                        // Refresh map
+                        if (typeof loadNearbyTasks === 'function' && typeof L !== 'undefined') {
+                            loadNearbyTasks(L.latLng(lat, lng));
+                        }
+                    } else {
+                        card.innerHTML = '<div class="proposal-error">Error: ' + (data.error || 'Unknown error') + '</div>';
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    card.innerHTML = '<div class="proposal-error">Network error posting task.</div>';
+                });
+        });
+
+        // Reject button
+        card.querySelector('.proposal-reject').addEventListener('click', () => {
+            card.innerHTML = '<div class="proposal-rejected">Task cancelled.</div>';
+        });
+
+        messages.appendChild(card);
+        messages.scrollTop = messages.scrollHeight;
+    }
+
     // Send message
     async function sendMessage() {
         const text = input.value.trim();
@@ -138,6 +209,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.ok) {
                 const data = await res.json();
                 appendMessage(data.reply, 'assistant');
+
+                // Render task proposal card if AI proposed a task
+                if (data.task_proposal) {
+                    renderTaskProposal(data.task_proposal);
+                }
 
                 // Render task cards if AI found tasks
                 if (data.found_tasks && data.found_tasks.length > 0) {

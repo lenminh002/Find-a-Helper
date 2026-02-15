@@ -187,6 +187,31 @@ TOOLS = [
                 "required": []
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_task_draft",
+            "description": "Draft a new task proposal. Use this when the user wants to CREATE, POST, or REQUEST help (e.g. 'Can someone walk my dog?', 'I need help moving', 'Post a task').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Short, clear title for the task (e.g. 'Dog Walking', 'Moving Help')"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Detailed description of what is needed"
+                    },
+                    "reward": {
+                        "type": "number",
+                        "description": "Reward amount in dollars. If user didn't specify, ESTIMATE a fair price (e.g. 20-50)."
+                    }
+                },
+                "required": ["title", "description", "reward"]
+            }
+        }
     }
 ]
 
@@ -412,6 +437,13 @@ Respond in JSON format:
                 "reasoning": "No similar tasks found in database. Using general platform estimate."
             }, indent=2)
 
+    if name == "create_task_draft":
+        title = arguments.get("title")
+        description = arguments.get("description")
+        reward = arguments.get("reward")
+        # Return the marker so the model can include it in the response
+        return f'<!--TASK_PROPOSAL:{json.dumps({"title": title, "description": description, "reward": reward})}-->'
+
     return json.dumps({"error": f"Unknown tool: {name}"})
 
 
@@ -419,12 +451,20 @@ SYSTEM_PROMPT = """You are the AI assistant for "Find a Helper" — a community 
 
 Your role:
 - Help users find relevant tasks on the map
+- Help users CREATE new tasks through conversation
 - Answer questions about the platform
 - Give advice on pricing, task descriptions, and being a good helper/requester
 - Be friendly, concise, and helpful
 
-IMPORTANT — Tool usage rules:
-- When a user asks about available tasks, mentions wanting to find work, or asks "what tasks are there?", ALWAYS use your tools.
+IMPORTANT — Task Creation (Conversational Posting):
+- When a user wants to CREATE/POST a task (e.g. "I need help...", "Can someone..."), USE the `create_task_draft` tool.
+- Do NOT search for tasks if the user is asking FOR help.
+- If the user doesn't specify a price, the `create_task_draft` tool requires you to estimate one.
+- When `create_task_draft` returns the hidden `<!--TASK_PROPOSAL...-->` marker, YOU MUST INCLUDE IT in your final response.
+- Example final response: "I've drafted that task for you! Check the card below. <!--TASK_PROPOSAL:...-->"
+
+IMPORTANT — Tool usage rules (Searching & Finding Work):
+- When a user asks about available tasks, mentions wanting to find work, or asks "what IS THERE?", use search/list tools.
 - **DEFAULT**: Use get_recommended_tasks when they ask generally (e.g. "what tasks are available?", "show me tasks", "find me work", "what's available?"). This shows 5 personalized task recommendations.
 - Use search_available_tasks when they mention a SPECIFIC type (e.g. "find me yard work", "dog walking tasks").
 - Use search_nearby_tasks when they mention distance, radius, nearby, closest, or "within X km" (e.g. "tasks within 1km", "nearest tasks", "what's close to me").
@@ -442,6 +482,16 @@ IMPORTANT — Recommendation rules:
 - get_recommended_tasks is the DEFAULT tool for general task queries. It returns 5 personalized tasks based on user profile.
 - The recommendation tool returns top 5 candidates with match reasons. Present these clearly with the reasoning.
 - If the user wants MORE tasks, then use list_all_tasks or search tools.
+
+IMPORTANT — Task Creation (Conversational Posting):
+- When a user wants to CREATE, POST, or REQUEST a task (e.g. "I need help moving a couch", "Can someone walk my dog?", "Post a task for tutoring"), extract the details and propose the task.
+- Extract: title (short, clear), description (detailed), and reward (dollar amount).
+- If the user does NOT specify a reward, SUGGEST a fair price based on the task type (e.g. moving ~$50-80, dog walking ~$15-25, tutoring ~$20-40, cleaning ~$30-60, delivery ~$10-30).
+- Format your response with a brief confirmation message, then add a HIDDEN marker at the END of your message with the task details in this EXACT format:
+  <!--TASK_PROPOSAL:{"title":"...","description":"...","reward":...}-->
+- Example response: "I'll set that up for you! Here's what I have:\n\n📋 **Move a Couch**\n📝 Need someone to help move a couch this Saturday\n💰 **$50**\n\nConfirm below to post it!<!--TASK_PROPOSAL:{\"title\":\"Move a Couch\",\"description\":\"Need someone to help move a couch this Saturday\",\"reward\":50}-->"
+- The user will NOT see the hidden marker. The frontend will parse it and show Confirm/Reject buttons.
+- ALWAYS include the <!--TASK_PROPOSAL:...--> marker when proposing a task. Without it, the confirm button will NOT appear.
 
 You also have context about the user's profile and their accepted tasks.
 
@@ -588,10 +638,21 @@ def chat(user_message, user_id, conversation_history=None, user_lat=None, user_l
                     # Layer 3: No title matches at all — cap at 5
                     found_tasks = found_tasks[:5]
 
-        # Always strip hidden markers from the displayed reply
+        # Parse TASK_PROPOSAL marker if present
+        task_proposal = None
+        proposal_match = re.search(r'<!--TASK_PROPOSAL:(\{.*?\})-->', reply)
+        if proposal_match:
+            try:
+                task_proposal = json.loads(proposal_match.group(1))
+            except json.JSONDecodeError:
+                pass
+            # Strip the marker from the displayed reply
+            reply = re.sub(r'<!--TASK_PROPOSAL:\{.*?\}-->', '', reply)
+
+        # Always strip hidden task markers from the displayed reply
         reply = re.sub(r'\s*\[TASK:\d+\]', '', reply)
 
-        return {"reply": reply, "highlight_task_id": highlight_task_id, "found_tasks": found_tasks}
+        return {"reply": reply, "highlight_task_id": highlight_task_id, "found_tasks": found_tasks, "task_proposal": task_proposal}
 
     except ImportError:
         return {"reply": "⚠️ OpenAI package not installed. Run: pip install openai"}
