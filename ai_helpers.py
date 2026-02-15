@@ -171,14 +171,26 @@ TOOLS = [
                         "description": "The type of task, e.g. 'moving', 'tutoring', 'dog walking'"
                     }
                 },
-                "required": ["task_type"]
+        "required": ["task_type"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_recommended_tasks",
+            "description": "Recommend the best tasks for the user based on their profile, expertise, and bio. Use this when the user asks for suggestions, recommendations, or 'what should I do?'.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
             }
         }
     }
 ]
 
 
-def execute_tool(name, arguments):
+def execute_tool(name, arguments, user_id=None):
     """Execute a tool call and return the result."""
     if name == "search_available_tasks":
         keyword = arguments.get("keyword", "")
@@ -192,6 +204,70 @@ def execute_tool(name, arguments):
         if not tasks:
             return json.dumps({"results": [], "message": f"No tasks found matching '{keyword}'"})
         return json.dumps({"results": tasks, "message": f"Found {len(tasks)} task(s) matching '{keyword}'"})
+
+    elif name == "get_recommended_tasks":
+        if not user_id:
+             return json.dumps({"error": "User context required for recommendations."})
+        
+        # Fetch user profile
+        user = _query_db('SELECT expertise, bio, role FROM users WHERE id = ?', (user_id,), one=True)
+        if not user:
+             return json.dumps({"error": "User profile not found."})
+        
+        user_expertise = user['expertise'] or "General skills"
+        user_bio = user['bio'] or "No bio"
+        
+        # Fetch available tasks
+        tasks = _query_db("SELECT map_id, title, description, reward FROM available_tasks")
+        if not tasks:
+             return json.dumps({"message": "No tasks available to recommend."})
+        
+        # Use simple scoring or LLM if list is small enough.
+        # We will use LLM for smart matching.
+        tasks_subset = tasks[:20] # Analyze top 20 tasks
+        
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            
+            prompt = f"""Match this user to the best tasks.
+User Profile:
+- Expertise: {user_expertise}
+- Bio: {user_bio}
+
+Available Tasks:
+{json.dumps([dict(t) for t in tasks_subset], indent=2)}
+
+
+Return the top 5 suitable tasks IDs and strict reasons.
+JSON Format: {{ "recommendations": [ {{ "map_id": <int>, "reason": "<text>" }} ] }}"""
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"}
+            )
+            
+            ai_data = json.loads(response.choices[0].message.content)
+            recs = ai_data.get("recommendations", [])
+            
+            # Enrich with task details
+            final_recs = []
+            for rec in recs:
+                task = next((t for t in tasks if t['map_id'] == rec['map_id']), None)
+                if task:
+                    final_recs.append({
+                        **dict(task),
+                        "match_reason": rec['reason']
+                    })
+            
+            return json.dumps({
+                "results": final_recs,
+                "message": f"Found {len(final_recs)} recommended tasks based on your profile."
+            })
+            
+        except Exception as e:
+            return json.dumps({"error": f"Recommendation failed: {str(e)}"})
 
     elif name == "search_nearby_tasks":
         radius_km = arguments.get("radius_km", 2)
@@ -349,19 +425,23 @@ Your role:
 
 IMPORTANT — Tool usage rules:
 - When a user asks about available tasks, mentions wanting to find work, or asks "what tasks are there?", ALWAYS use your tools.
-- Use search_available_tasks when they mention a specific type (e.g. "find me yard work", "dog walking tasks").
+- **DEFAULT**: Use get_recommended_tasks when they ask generally (e.g. "what tasks are available?", "show me tasks", "find me work", "what's available?"). This shows 5 personalized task recommendations.
+- Use search_available_tasks when they mention a SPECIFIC type (e.g. "find me yard work", "dog walking tasks").
 - Use search_nearby_tasks when they mention distance, radius, nearby, closest, or "within X km" (e.g. "tasks within 1km", "nearest tasks", "what's close to me").
-- Use list_all_tasks when they ask generally (e.g. "what tasks are available?", "show me tasks").
+- Use list_all_tasks ONLY when they explicitly ask for "all tasks" or "everything available".
 - After finding tasks, use highlight_task to show the best match on the map.
 - The task results will be shown as interactive cards in the chat. Summarize what you found briefly.
 
 IMPORTANT — Presenting tasks:
-- Every task has a unique map ID (e.g. [ID:3]). ALWAYS include the map ID when mentioning a task.
-- Each task result includes a distance_km field showing how far it is from the user. ALWAYS mention the distance.
-- Present each task with its UNIQUE details: title, description, reward, and distance.
-- If two tasks have similar titles, emphasize how they differ (different description, reward, or ID).
-- NEVER list the same task info twice. Each entry must be distinguishable.
-- When the user asks for tasks within a specific radius, ONLY show tasks that are actually within that radius. If none exist, say so clearly.
+- Since interactive cards are shown below your message, KEEP YOUR TEXT RESPONSE VERY BRIEF.
+- Do NOT list all details (reward, distance, description) in the text. Just mention the top 1-2 matches by title and why they fit.
+- Use only the task TITLE (e.g. "Grocery Run"). Do not include IDs like [ID:3].
+- Let the user know they can click "Show on Map" on the cards below.
+
+IMPORTANT — Recommendation rules:
+- get_recommended_tasks is the DEFAULT tool for general task queries. It returns 5 personalized tasks based on user profile.
+- The recommendation tool returns top 5 candidates with match reasons. Present these clearly with the reasoning.
+- If the user wants MORE tasks, then use list_all_tasks or search tools.
 
 You also have context about the user's profile and their accepted tasks.
 
@@ -431,10 +511,10 @@ def chat(user_message, user_id, conversation_history=None, user_lat=None, user_l
             for tool_call in choice.message.tool_calls:
                 fn_name = tool_call.function.name
                 fn_args = json.loads(tool_call.function.arguments)
-                result = execute_tool(fn_name, fn_args)
+                result = execute_tool(fn_name, fn_args, user_id=user_id)
 
                 # Track found tasks from search
-                if fn_name in ("search_available_tasks", "list_all_tasks", "search_nearby_tasks"):
+                if fn_name in ("search_available_tasks", "list_all_tasks", "search_nearby_tasks", "get_recommended_tasks"):
                     parsed = json.loads(result)
                     if parsed.get("results"):
                         found_tasks = parsed["results"]

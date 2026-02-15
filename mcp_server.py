@@ -114,6 +114,19 @@ try:
                     "required": ["task_type"]
                 }
             ),
+            types.Tool(
+                name="get_recommended_tasks",
+                description="Recommend tasks based on a user's profile.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "user_id": {
+                            "type": "integer",
+                            "description": "Optional user ID to base recommendations on. Defaults to the first user."
+                        }
+                    }
+                }
+            ),
         ]
 
     @server.call_tool()
@@ -223,14 +236,71 @@ Respond in JSON format:
                         "error": str(e)
                     }
                     return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
-            else:
-                # No data available
                 return [types.TextContent(type="text", text=json.dumps({
                     "task_type": task_type,
                     "suggested_price": 30,
                     "price_range": {"min": 15, "max": 50},
                     "reasoning": "No similar tasks found in database. Using general platform estimate."
                 }, indent=2))]
+
+        elif name == "get_recommended_tasks":
+            user_id = arguments.get("user_id", 1)
+            
+            # Fetch user profile
+            user = query_db_one('SELECT expertise, bio, role FROM users WHERE id = ?', (user_id,))
+            if not user:
+                 return [types.TextContent(type="text", text=json.dumps({"error": "User profile not found."}))]
+            
+            user_expertise = user['expertise'] or "General skills"
+            user_bio = user['bio'] or "No bio"
+            
+            # Fetch available tasks
+            tasks = query_db("SELECT map_id, title, description, reward FROM available_tasks")
+            if not tasks:
+                 return [types.TextContent(type="text", text=json.dumps({"message": "No tasks available to recommend."}))]
+            
+            tasks_subset = tasks[:20] 
+            
+            try:
+                from openai import OpenAI
+                client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+                
+                prompt = f"""Match this user to the best tasks.
+User Profile:
+- Expertise: {user_expertise}
+- Bio: {user_bio}
+
+Available Tasks:
+{json.dumps([dict(t) for t in tasks_subset], indent=2)}
+
+Return the top 5 suitable tasks IDs and strict reasons.
+JSON Format: {{ "recommendations": [ {{ "map_id": <int>, "reason": "<text>" }} ] }}"""
+
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"}
+                )
+                
+                ai_data = json.loads(response.choices[0].message.content)
+                recs = ai_data.get("recommendations", [])
+                
+                final_recs = []
+                for rec in recs:
+                    task = next((t for t in tasks if t['map_id'] == rec['map_id']), None)
+                    if task:
+                        final_recs.append({
+                            **dict(task),
+                            "match_reason": rec['reason']
+                        })
+                
+                return [types.TextContent(type="text", text=json.dumps({
+                    "results": final_recs,
+                    "message": f"Found {len(final_recs)} recommended tasks based on your profile."
+                }, indent=2))]
+                
+            except Exception as e:
+                return [types.TextContent(type="text", text=json.dumps({"error": f"Recommendation failed: {str(e)}"}))]
 
         raise ValueError(f"Unknown tool: {name}")
 
