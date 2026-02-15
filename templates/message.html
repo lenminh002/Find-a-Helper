@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css', v=1) }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/tasks.css', v=1) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/message.css', v=1) }}">
 </head>
 
 <body>
@@ -20,16 +20,6 @@
         </ul>
     </nav>
 
-    <div class="container">
-        <h1>My Tasks</h1>
-        <div id="task-list" class="task-grid">
-            <!-- Tasks will be dynamically inserted here -->
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
-    <script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
 </body>
 
 </html>

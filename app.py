@@ -93,16 +93,9 @@ def index():
 def tasks():
     return render_template('tasks.html')
 
-@app.route('/login')
-def login():
-    # Simple dummy login for demo purposes
-    # Logs in the first user in the DB
-    db = get_db()
-    user = db.execute('SELECT * FROM users LIMIT 1').fetchone()
-    if user:
-        session['user_id'] = user['id']
-        return redirect(url_for('userProfile'))
-    return "No users found to login.", 404
+@app.route('/messages')
+def messages():
+    return render_template('message.html')
 
 @app.route('/logout')
 def logout():
@@ -112,14 +105,20 @@ def logout():
 @app.route('/profile')
 def userProfile():
     if 'user_id' not in session:
-        return redirect(url_for('login'))
+        # Auto-login as first user (demo)
+        db = get_db()
+        user = db.execute('SELECT * FROM users LIMIT 1').fetchone()
+        if user:
+            session['user_id'] = user['id']
+        else:
+            return "No users found.", 404
     
     db = get_db()
     user = db.execute('SELECT * FROM users WHERE id = ?', (session['user_id'],)).fetchone()
     
     if not user:
          session.clear()
-         return redirect(url_for('login'))
+         return redirect(url_for('index'))
 
     # Fetch tasks
     accepted_tasks = db.execute("SELECT * FROM tasks WHERE status = 'accepted' ORDER BY id DESC").fetchall()
@@ -130,14 +129,14 @@ def userProfile():
 @app.route('/settings')
 def userSettings():
     if 'user_id' not in session:
-        return redirect(url_for('login'))
+        return redirect(url_for('index'))
     
     db = get_db()
     user = db.execute('SELECT * FROM users WHERE id = ?', (session['user_id'],)).fetchone()
     
     if not user:
          session.clear()
-         return redirect(url_for('login'))
+         return redirect(url_for('index'))
 
     return render_template('settings.html', user=user)
 
