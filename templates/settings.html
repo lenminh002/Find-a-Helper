@@ -28,7 +28,6 @@
                     alt="Avatar" class="sidebar-avatar">
                 <div class="sidebar-user-info">
                     <div class="sidebar-username" id="sidebar-username">{{ user.username }}</div>
-                    <div class="sidebar-user-role">{{ user.role }}</div>
                 </div>
             </div>
 
@@ -113,24 +112,7 @@
                     <button class="btn-edit">Edit</button>
                 </div>
 
-                <div class="field-row" data-field="role">
-                    <div class="field-info">
-                        <div class="field-label">Role</div>
-                        <div class="field-value">{{ user.role or 'Helper' }}</div>
-                        <div class="field-edit" style="display:none;">
-                            <select class="field-input field-select">
-                                <option value="Helper" {{ 'selected' if user.role=='Helper' else '' }}>Helper</option>
-                                <option value="Requester" {{ 'selected' if user.role=='Requester' else '' }}>Requester
-                                </option>
-                            </select>
-                            <div class="field-actions">
-                                <button class="btn-save">Save</button>
-                                <button class="btn-cancel">Cancel</button>
-                            </div>
-                        </div>
-                    </div>
-                    <button class="btn-edit">Edit</button>
-                </div>
+
             </div>
         </main>
     </div>

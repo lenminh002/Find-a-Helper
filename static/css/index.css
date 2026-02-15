@@ -100,15 +100,12 @@
 }
 
 /* Floating Action Button */
-.fab {
+.fab,
+.fab-left {
     position: fixed;
-    bottom: 30px;
-    right: 30px;
     width: 60px;
     height: 60px;
     border-radius: 50%;
-    background-color: var(--primary-color);
-    color: white;
     border: none;
     font-size: 30px;
     cursor: pointer;
@@ -118,9 +115,22 @@
     align-items: center;
     justify-content: center;
     transition: transform 0.2s, background-color 0.2s;
+    background-color: var(--primary-color);
+    color: white;
 }
 
-.fab:hover {
+.fab {
+    bottom: 30px;
+    right: 30px;
+}
+
+.fab-left {
+    bottom: 30px;
+    left: 30px;
+}
+
+.fab:hover,
+.fab-left:hover {
     transform: scale(1.05);
     background-color: #333;
 }

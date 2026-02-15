@@ -62,6 +62,118 @@
         </div>
     </div>
 
+    <!-- Post Task Button (Everyone) -->
+    <button id="post-task-btn" class="fab-left" title="Post a Task">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+    </button>
+
+    <!-- Post Task Modal -->
+    <div id="post-task-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <form id="post-task-form">
+                <h3>Post a New Task</h3>
+                <div class="form-group">
+                    <label for="task-title">Task Title</label>
+                    <input type="text" id="task-title" required placeholder="e.g. Move a couch">
+                </div>
+                <div class="form-group">
+                    <label for="task-desc">Description</label>
+                    <textarea id="task-desc" required placeholder="Describe what you need help with..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="task-reward">Reward ($)</label>
+                    <input type="number" id="task-reward" min="0" required placeholder="50">
+                </div>
+                <button type="submit" class="btn-submit">Post Task</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const modal = document.getElementById('post-task-modal');
+            const btn = document.getElementById('post-task-btn');
+            const span = document.querySelector('.close-modal');
+            const form = document.getElementById('post-task-form');
+
+            if (btn) {
+                btn.onclick = () => modal.style.display = "block";
+            }
+            if (span) {
+                span.onclick = () => modal.style.display = "none";
+            }
+            window.onclick = (event) => {
+                if (event.target == modal) {
+                    modal.style.display = "none";
+                }
+            }
+
+            if (form) {
+                form.onsubmit = (e) => {
+                    e.preventDefault();
+
+                    const title = document.getElementById('task-title').value;
+                    const desc = document.getElementById('task-desc').value;
+                    const reward = document.getElementById('task-reward').value;
+
+                    // Get location logic
+                    let lat, lng;
+                    // Try to get myLocation from map.js global variable
+                    if (typeof myLocation !== 'undefined' && myLocation) {
+                        lat = myLocation.lat;
+                        lng = myLocation.lng;
+                    } else if (typeof map !== 'undefined') {
+                        const center = map.getCenter();
+                        lat = center.lat;
+                        lng = center.lng;
+                    } else {
+                        alert("Map not initialized, cannot get location. Please wait for map to load.");
+                        return;
+                    }
+
+                    fetch('/api/post_task', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            title: title,
+                            description: desc,
+                            reward: reward,
+                            lat: lat,
+                            lng: lng
+                        })
+                    })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.success) {
+                                alert('Task Posted Successfully! Look for the GREEN marker on the map.');
+                                modal.style.display = "none";
+                                form.reset();
+
+                                // Refresh map using loadNearbyTasks from map.js
+                                if (typeof loadNearbyTasks === 'function' && typeof L !== 'undefined') {
+                                    loadNearbyTasks(L.latLng(lat, lng));
+                                } else {
+                                    // Fallback if function not found
+                                    location.reload();
+                                }
+                            } else {
+                                alert('Error posting task: ' + (data.error || 'Unknown error'));
+                            }
+                        })
+                        .catch(err => {
+                            console.error(err);
+                            alert('Error posting task. Check console.');
+                        });
+                };
+            }
+        });
+    </script>
+
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
     <script src="{{ url_for('static', filename='js/map.js') }}"></script>

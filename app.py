@@ -164,7 +164,56 @@ def update_profile():
     db.execute(f'UPDATE users SET {field} = ? WHERE id = ?', (value, session['user_id']))
     db.commit()
     
-    return jsonify({'message': 'Profile updated', 'field': field, 'value': value}), 200
+@app.route('/api/post_task', methods=['POST'])
+def post_task():
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data'}), 400
+    
+    title = data.get('title')
+    description = data.get('description')
+    reward = data.get('reward')
+    lat = data.get('lat')
+    lng = data.get('lng')
+
+    db = get_db()
+    cursor = db.execute(
+        'INSERT INTO tasks (title, description, reward, lat, lng, status) VALUES (?, ?, ?, ?, ?, ?)',
+        (title, description, reward, lat, lng, 'posted')
+    )
+    db.commit()
+    new_id = cursor.lastrowid
+    
+    new_task = {
+        'id': new_id + 10000, # Offset ID to avoid collision with dummy tasks (0-60)
+        'title': title,
+        'description': description,
+        'reward': reward,
+        'lat': lat,
+        'lng': lng,
+        'is_custom': True
+    }
+    return jsonify({'success': True, 'task': new_task})
+
+@app.route('/api/delete_task', methods=['POST'])
+def delete_task_frontend():
+    data = request.json
+    if not data or 'id' not in data:
+        return jsonify({'error': 'No task ID provided'}), 400
+    
+    task_id = int(data['id'])
+    
+    # Handle offset IDs for DB tasks
+    if task_id > 10000:
+        db_id = task_id - 10000
+        db = get_db()
+        db.execute('DELETE FROM tasks WHERE id = ?', (db_id,))
+        db.commit()
+        return jsonify({'success': True})
+    else:
+        # Dummy task deletion logic (if supported) or error
+        # Currently we assume only custom tasks (ID > 10000) are deletable via this button
+        return jsonify({'error': 'Cannot delete system tasks'}), 400
 
 @app.route('/api/nearby')
 def get_nearby_data():
@@ -178,10 +227,24 @@ def get_nearby_data():
 
     # Get accepted task IDs to filter them out
     db = get_db()
-    cur = db.execute('SELECT original_id FROM tasks')
-    accepted_ids = {row['original_id'] for row in cur.fetchall() if row['original_id'] is not None}
+    cur = db.execute('SELECT original_id FROM tasks WHERE original_id IS NOT NULL')
+    accepted_ids = {row['original_id'] for row in cur.fetchall()}
 
-    # 20 unique task templates — each with a distinct title + description
+    # 1. Fetch user-posted tasks from DB (status='posted')
+    cur = db.execute("SELECT * FROM tasks WHERE status = 'posted'")
+    posted_rows = cur.fetchall()
+    for row in posted_rows:
+        tasks.append({
+            'id': row['id'] + 10000, # Apply offset
+            'title': row['title'],
+            'description': row['description'],
+            'reward': row['reward'],
+            'lat': row['lat'],
+            'lng': row['lng'],
+            'is_custom': True
+        })
+
+    # 2. Add Dummy Tasks
     # 20 unique task templates — each with a distinct title + description
     task_templates = dummy_tasks.task_templates
 
@@ -284,8 +347,8 @@ def get_my_tasks():
 
 
 
-@app.route('/api/delete_task/<int:task_id>', methods=['DELETE'])
-def delete_task(task_id):
+@app.route('/api/delete_db_task/<int:task_id>', methods=['DELETE'])
+def delete_db_task(task_id):
     db = get_db()
     db.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
     db.commit()

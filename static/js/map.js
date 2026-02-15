@@ -46,15 +46,24 @@ function loadNearbyTasks(latlng) {
                         <p><strong>Reward:</strong> $${task.reward}</p>
                         <p><strong>Distance:</strong> ${distanceKm} km</p>
                         <hr style="margin: 10px 0; border: 0; border-top: 1px solid #eee;">
-                        <button onclick="acceptTask(event, ${task.id})" class="btn-post">Accept Task</button>
+                        ${task.is_custom ?
+                        `<button onclick="deleteTask(event, ${task.id})" class="btn-post" style="background-color: #d9534f;">Delete Task</button>` :
+                        `<button onclick="acceptTask(event, ${task.id})" class="btn-post">Accept Task</button>`
+                    }
                     </div>
                 `;
 
+                const isCustom = task.is_custom === true;
+                const markerColor = isCustom ? 'green' : 'red';
+                const fillColor = isCustom ? '#32CD32' : '#f03'; // LimeGreen or standard red
+                const fillOpacity = isCustom ? 0.8 : 0.5;
+                const radius = isCustom ? 12 : 10;
+
                 var marker = L.circleMarker([task.lat, task.lng], {
-                    color: 'red',
-                    fillColor: '#f03',
-                    fillOpacity: 0.5,
-                    radius: 10
+                    color: markerColor,
+                    fillColor: fillColor,
+                    fillOpacity: fillOpacity,
+                    radius: radius
                 }).addTo(map)
                     .bindPopup(popupContent);
 
@@ -145,5 +154,33 @@ function acceptTask(event, taskId) {
         .catch((error) => {
             console.error('Error:', error);
             alert('Error accepting task');
+        });
+}
+
+function deleteTask(event, taskId) {
+    event.preventDefault();
+    if (!confirm("Are you sure you want to delete this task?")) return;
+
+    fetch('/api/delete_task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: taskId })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                map.closePopup();
+                if (markers[taskId]) {
+                    map.removeLayer(markers[taskId]);
+                    delete markers[taskId];
+                    delete availableTasks[taskId];
+                }
+            } else {
+                alert("Error deleting task: " + (data.error || "Unknown error"));
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Error deleting task");
         });
 }
