@@ -32,7 +32,8 @@
             </div>
 
             <ul class="sidebar-nav">
-                <li><a href="{{ url_for('userProfile') }}" class="active">Settings</a></li>
+                <li><a href="{{ url_for('userProfile') }}" class="active">User Profile</a></li>
+                <li><a href="{{ url_for('userSettings') }}">Settings</a></li>
             </ul>
 
             <div class="sidebar-footer">
@@ -50,86 +51,79 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <h1>Settings</h1>
+            <h1>User Profile</h1>
 
-            <div class="settings-tabs">
-                <a href="#" class="tab-link active">Profile</a>
-                <a href="#" class="tab-link">Personal Info</a>
-                <a href="#" class="tab-link">Login &amp; Security</a>
+            <!-- New Profile Dashboard -->
+            <div class="profile-header-section">
+                <!-- User Summary Card -->
+                <div class="profile-card">
+                    <img src="https://ui-avatars.com/api/?name={{ user.username }}&background=222&color=fff&size=200"
+                        alt="Avatar" class="profile-avatar-large">
+                    <div class="profile-name-large">{{ user.username }}</div>
+                    <div class="profile-role-badge">{{ user.role }}</div>
+
+                    <div class="profile-stats-row">
+                        <div class="stat-box">
+                            <span class="stat-number">{{ accepted_tasks|length }}</span>
+                            <span class="stat-label">Accepted</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-number">{{ completed_tasks|length }}</span>
+                            <span class="stat-label">Completed</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tasks Overview -->
+                <div class="tasks-overview">
+                    <!-- Accepted Tasks -->
+                    <div class="task-list-section">
+                        <div class="section-title">
+                            Accepted Tasks
+                            <span class="task-count-badge">{{ accepted_tasks|length }}</span>
+                        </div>
+                        <div class="task-status-list">
+                            {% if accepted_tasks %}
+                            {% for task in accepted_tasks %}
+                            <div class="task-item">
+                                <div class="task-main">
+                                    <div class="task-title">{{ task.title }}</div>
+                                    <div class="task-meta">{{ task.description[:60] }}...</div>
+                                </div>
+                                <div class="task-reward-tag">${{ task.reward }}</div>
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <div class="empty-state">No active tasks yet.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Completed Tasks -->
+                    <div class="task-list-section" style="margin-top: 2rem;">
+                        <div class="section-title">
+                            Completed Tasks
+                            <span class="task-count-badge">{{ completed_tasks|length }}</span>
+                        </div>
+                        <div class="task-status-list">
+                            {% if completed_tasks %}
+                            {% for task in completed_tasks %}
+                            <div class="task-item">
+                                <div class="task-main">
+                                    <div class="task-title">{{ task.title }}</div>
+                                    <div class="task-meta task-status-completed">Completed</div>
+                                </div>
+                                <div class="task-reward-tag">${{ task.reward }}</div>
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <div class="empty-state">No completed tasks yet.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div class="settings-fields">
-                <div class="field-row" data-field="username">
-                    <div class="field-info">
-                        <div class="field-label">Username</div>
-                        <div class="field-value">{{ user.username }}</div>
-                        <div class="field-edit" style="display:none;">
-                            <input type="text" class="field-input" value="{{ user.username }}">
-                            <div class="field-actions">
-                                <button class="btn-save">Save</button>
-                                <button class="btn-cancel">Cancel</button>
-                            </div>
-                        </div>
-                    </div>
-                    <button class="btn-edit">Edit</button>
-                </div>
-
-                <div class="field-row" data-field="bio">
-                    <div class="field-info">
-                        <div class="field-label">Bio</div>
-                        <div class="field-value">{{ user.bio or 'N/A' }}</div>
-                        <div class="field-edit" style="display:none;">
-                            <textarea class="field-input field-textarea">{{ user.bio or '' }}</textarea>
-                            <div class="field-actions">
-                                <button class="btn-save">Save</button>
-                                <button class="btn-cancel">Cancel</button>
-                            </div>
-                        </div>
-                    </div>
-                    <button class="btn-edit">Edit</button>
-                </div>
-
-                <div class="field-row">
-                    <div class="field-info">
-                        <div class="field-label">Joined</div>
-                        <div class="field-value">Member since {{ user.joined_date }}</div>
-                    </div>
-                </div>
-
-                <div class="field-row" data-field="expertise">
-                    <div class="field-info">
-                        <div class="field-label">Expertise</div>
-                        <div class="field-value">{{ user.expertise or 'N/A' }}</div>
-                        <div class="field-edit" style="display:none;">
-                            <input type="text" class="field-input" value="{{ user.expertise or '' }}">
-                            <div class="field-actions">
-                                <button class="btn-save">Save</button>
-                                <button class="btn-cancel">Cancel</button>
-                            </div>
-                        </div>
-                    </div>
-                    <button class="btn-edit">Edit</button>
-                </div>
-
-                <div class="field-row" data-field="role">
-                    <div class="field-info">
-                        <div class="field-label">Role</div>
-                        <div class="field-value">{{ user.role or 'Helper' }}</div>
-                        <div class="field-edit" style="display:none;">
-                            <select class="field-input field-select">
-                                <option value="Helper" {{ 'selected' if user.role=='Helper' else '' }}>Helper</option>
-                                <option value="Requester" {{ 'selected' if user.role=='Requester' else '' }}>Requester
-                                </option>
-                            </select>
-                            <div class="field-actions">
-                                <button class="btn-save">Save</button>
-                                <button class="btn-cancel">Cancel</button>
-                            </div>
-                        </div>
-                    </div>
-                    <button class="btn-edit">Edit</button>
-                </div>
-            </div>
         </main>
     </div>
 

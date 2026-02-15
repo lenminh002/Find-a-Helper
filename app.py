@@ -121,7 +121,25 @@ def userProfile():
          session.clear()
          return redirect(url_for('login'))
 
-    return render_template('userProfile.html', user=user)
+    # Fetch tasks
+    accepted_tasks = db.execute("SELECT * FROM tasks WHERE status = 'accepted' ORDER BY id DESC").fetchall()
+    completed_tasks = db.execute("SELECT * FROM tasks WHERE status = 'completed' ORDER BY id DESC").fetchall()
+
+    return render_template('userProfile.html', user=user, accepted_tasks=accepted_tasks, completed_tasks=completed_tasks)
+
+@app.route('/settings')
+def userSettings():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    db = get_db()
+    user = db.execute('SELECT * FROM users WHERE id = ?', (session['user_id'],)).fetchone()
+    
+    if not user:
+         session.clear()
+         return redirect(url_for('login'))
+
+    return render_template('settings.html', user=user)
 
 @app.route('/api/update_profile', methods=['POST'])
 def update_profile():
@@ -172,11 +190,13 @@ def get_nearby_data():
     location_seed = int(round(lat, 2) * 10000 + round(lng, 2) * 10000)
     rng = random.Random(location_seed)
 
-    # Shuffle templates deterministically and assign to task IDs 1-20
+    # Shuffle templates deterministically and assign to task IDs 1-60
     shuffled = list(range(len(task_templates)))
     rng.shuffle(shuffled)
 
-    for i in range(20):
+    # Show up to 60 available tasks on the map
+    limit = min(60, len(task_templates))
+    for i in range(limit):
         if (i + 1) in accepted_ids:
             continue
 
