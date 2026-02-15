@@ -14,9 +14,11 @@ AI functionality:
     - Ask the AI: "What tasks should I do?" or "Find me work".
     - It should return a ranked list with reasons why each task fits you.]
 
-Conversational Task Creation (for Requesters)
-AI Profile Optimizer
-Safety & Content Moderation
-Multilingual Translation & Support
+
+Idea:
+- Conversational Task Creation (for Requesters)
+- AI Profile Optimizer
+- Safety & Content Moderation
+- Multilingual Translation & Support
 
 
