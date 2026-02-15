@@ -7,6 +7,10 @@ Run standalone:  python mcp_server.py
 import sqlite3
 import json
 import sys
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DATABASE = 'database.db'
 
@@ -134,30 +138,99 @@ try:
 
         elif name == "suggest_price":
             task_type = arguments.get("task_type", "").lower()
-            # Simple price lookup based on common task types
-            price_guide = {
-                "moving": {"min": 30, "max": 60, "typical": 50},
-                "grocery": {"min": 15, "max": 30, "typical": 25},
-                "dog walking": {"min": 15, "max": 25, "typical": 20},
-                "furniture": {"min": 30, "max": 50, "typical": 40},
-                "yard work": {"min": 25, "max": 45, "typical": 35},
-                "tech support": {"min": 20, "max": 40, "typical": 30},
-                "cat sitting": {"min": 30, "max": 50, "typical": 45},
-                "car wash": {"min": 15, "max": 30, "typical": 20},
-                "tutoring": {"min": 25, "max": 50, "typical": 40},
-                "heavy lifting": {"min": 10, "max": 25, "typical": 15},
-            }
-            for key, prices in price_guide.items():
-                if key in task_type:
-                    return [types.TextContent(type="text", text=json.dumps(
-                        {"task_type": task_type, **prices, "note": f"Based on platform averages for {key} tasks"},
-                        indent=2
-                    ))]
-            return [types.TextContent(type="text", text=json.dumps(
-                {"task_type": task_type, "min": 15, "max": 50, "typical": 30,
-                 "note": "General estimate — price varies by complexity and location"},
-                indent=2
-            ))]
+            
+            # Query database for similar tasks from both tables
+            similar_tasks = query_db(
+                "SELECT title, reward FROM tasks WHERE title LIKE ? OR description LIKE ?",
+                (f"%{task_type}%", f"%{task_type}%")
+            )
+            available_tasks = query_db(
+                "SELECT title, reward FROM available_tasks WHERE title LIKE ? OR description LIKE ?",
+                (f"%{task_type}%", f"%{task_type}%")
+            )
+            
+            # Combine results
+            all_similar = similar_tasks + available_tasks
+            
+            if not all_similar:
+                # Fallback: get all tasks if no exact matches
+                all_similar = query_db("SELECT title, reward FROM tasks UNION SELECT title, reward FROM available_tasks")
+            
+            # Calculate statistics
+            rewards = [task["reward"] for task in all_similar if task["reward"]]
+            
+            if rewards:
+                price_min = round(min(rewards), 2)
+                price_max = round(max(rewards), 2)
+                price_avg = round(sum(rewards) / len(rewards), 2)
+                
+                # Use OpenAI to suggest a price with reasoning
+                try:
+                    from openai import OpenAI
+                    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+                    
+                    prompt = f"""Based on the following task pricing data from our platform, suggest a fair price for a '{task_type}' task.
+
+Database statistics:
+- Minimum price seen: ${price_min}
+- Maximum price seen: ${price_max}
+- Average price: ${price_avg}
+- Number of similar tasks: {len(rewards)}
+
+Sample tasks:
+{json.dumps(all_similar[:5], indent=2)}
+
+Provide:
+1. A suggested price (single number)
+2. A recommended price range (min-max)
+3. Brief reasoning (2-3 sentences)
+
+Respond in JSON format:
+{{
+  "suggested_price": <number>,
+  "price_range": {{"min": <number>, "max": <number>}},
+  "reasoning": "<text>"
+}}"""
+                    
+                    response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": prompt}],
+                        response_format={"type": "json_object"}
+                    )
+                    
+                    ai_result = json.loads(response.choices[0].message.content)
+                    result = {
+                        "task_type": task_type,
+                        "suggested_price": ai_result.get("suggested_price", price_avg),
+                        "price_range": ai_result.get("price_range", {"min": price_min, "max": price_max}),
+                        "reasoning": ai_result.get("reasoning", "Based on platform data"),
+                        "data_stats": {
+                            "sample_size": len(rewards),
+                            "db_min": price_min,
+                            "db_max": price_max,
+                            "db_avg": price_avg
+                        }
+                    }
+                    return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
+                    
+                except Exception as e:
+                    # Fallback if OpenAI fails
+                    result = {
+                        "task_type": task_type,
+                        "suggested_price": price_avg,
+                        "price_range": {"min": price_min, "max": price_max},
+                        "reasoning": f"Based on {len(rewards)} similar tasks in our database",
+                        "error": str(e)
+                    }
+                    return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                # No data available
+                return [types.TextContent(type="text", text=json.dumps({
+                    "task_type": task_type,
+                    "suggested_price": 30,
+                    "price_range": {"min": 15, "max": 50},
+                    "reasoning": "No similar tasks found in database. Using general platform estimate."
+                }, indent=2))]
 
         raise ValueError(f"Unknown tool: {name}")
 

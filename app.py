@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import ai_helpers
+import dummy_tasks
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'super_secret_key_for_hackathon')
@@ -164,28 +165,8 @@ def get_nearby_data():
     accepted_ids = {row['original_id'] for row in cur.fetchall() if row['original_id'] is not None}
 
     # 20 unique task templates — each with a distinct title + description
-    task_templates = [
-        {"title": "Move Couch",           "reward": 50, "desc": "Need help moving a couch to the second floor."},
-        {"title": "Grocery Run",          "reward": 25, "desc": "Pick up groceries from Whole Foods."},
-        {"title": "Dog Walking",          "reward": 20, "desc": "Walk my golden retriever for 30 mins."},
-        {"title": "Assemble Furniture",   "reward": 40, "desc": "Assemble an IKEA desk."},
-        {"title": "Yard Work",            "reward": 35, "desc": "Rake leaves in the backyard."},
-        {"title": "Tech Support",         "reward": 30, "desc": "Help setting up a new printer."},
-        {"title": "Cat Sitting",          "reward": 45, "desc": "Feed my cat while I'm away for the weekend."},
-        {"title": "Car Wash",             "reward": 20, "desc": "Wash my sedan in the driveway."},
-        {"title": "Tutoring",             "reward": 40, "desc": "Algebra tutoring for 8th grader."},
-        {"title": "Lift Heavy Boxes",     "reward": 15, "desc": "Help move 5 boxes to the garage."},
-        {"title": "Move Dining Table",    "reward": 45, "desc": "Help relocate a dining table to a new apartment."},
-        {"title": "Pharmacy Pickup",      "reward": 15, "desc": "Pick up a prescription from CVS."},
-        {"title": "Walk Two Huskies",     "reward": 30, "desc": "Walk two huskies around the park for 45 mins."},
-        {"title": "Mount TV",             "reward": 35, "desc": "Mount a 55-inch TV on a living room wall."},
-        {"title": "Garden Weeding",       "reward": 25, "desc": "Weed the front garden beds and trim hedges."},
-        {"title": "WiFi Setup",           "reward": 25, "desc": "Set up a new mesh WiFi system at home."},
-        {"title": "Pet Sitting",          "reward": 40, "desc": "Watch my two dogs overnight while I travel."},
-        {"title": "Bike Repair",          "reward": 20, "desc": "Fix a flat tire and adjust brakes on my bike."},
-        {"title": "Math Tutoring",        "reward": 35, "desc": "Help with calculus homework for a college student."},
-        {"title": "Garage Cleanup",       "reward": 30, "desc": "Help organize and clean out a cluttered garage."},
-    ]
+    # 20 unique task templates — each with a distinct title + description
+    task_templates = dummy_tasks.task_templates
 
     # Seed based on rounded location so tasks are stable for the same area
     location_seed = int(round(lat, 2) * 10000 + round(lng, 2) * 10000)
