@@ -32,6 +32,8 @@
     - High Match: Purple color
     - Medium Match: Orange color
     - Low Match: Red color
+
+- MCP is available for outside AI agent to use our app's database
     
 Future updates / Ideas:
 - AI Profile Optimizer
