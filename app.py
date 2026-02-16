@@ -75,6 +75,15 @@ def init_db():
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS direct_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                sender TEXT NOT NULL DEFAULT 'user',
+                content TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         
         # Seed a dummy user if not exists
         cur = db.execute('SELECT * FROM users LIMIT 1')
@@ -96,6 +105,97 @@ def tasks():
 @app.route('/messages')
 def messages():
     return render_template('message.html')
+
+@app.route('/api/conversations', methods=['GET'])
+def get_conversations():
+    db = get_db()
+    # Get all accepted tasks as conversations
+    cur = db.execute("SELECT * FROM tasks WHERE status = 'accepted' ORDER BY timestamp DESC")
+    rows = cur.fetchall()
+    
+    conversations = []
+    for row in rows:
+        # Get the latest message for preview
+        msg_cur = db.execute(
+            'SELECT content, sender, timestamp FROM direct_messages WHERE task_id = ? ORDER BY id DESC LIMIT 1',
+            (row['id'],)
+        )
+        last_msg = msg_cur.fetchone()
+        
+        # Count unread (for demo, just count requester messages)
+        unread_cur = db.execute(
+            "SELECT COUNT(*) as cnt FROM direct_messages WHERE task_id = ? AND sender = 'requester'",
+            (row['id'],)
+        )
+        
+        conversations.append({
+            'task_id': row['id'],
+            'title': row['title'],
+            'description': row['description'],
+            'reward': row['reward'],
+            'last_message': last_msg['content'] if last_msg else 'No messages yet',
+            'last_sender': last_msg['sender'] if last_msg else None,
+            'last_time': last_msg['timestamp'] if last_msg else row['timestamp'],
+        })
+    
+    return jsonify({'conversations': conversations})
+
+@app.route('/api/messages/<int:task_id>', methods=['GET'])
+def get_messages(task_id):
+    db = get_db()
+    cur = db.execute(
+        'SELECT * FROM direct_messages WHERE task_id = ? ORDER BY id ASC',
+        (task_id,)
+    )
+    rows = cur.fetchall()
+    
+    messages_list = []
+    for row in rows:
+        messages_list.append({
+            'id': row['id'],
+            'sender': row['sender'],
+            'content': row['content'],
+            'timestamp': row['timestamp']
+        })
+    
+    return jsonify({'messages': messages_list})
+
+@app.route('/api/messages/<int:task_id>', methods=['POST'])
+def send_message(task_id):
+    data = request.json
+    if not data or not data.get('content'):
+        return jsonify({'error': 'No message content'}), 400
+    
+    content = data['content'].strip()
+    if not content:
+        return jsonify({'error': 'Empty message'}), 400
+    
+    db = get_db()
+    
+    # Save user message
+    db.execute(
+        'INSERT INTO direct_messages (task_id, sender, content) VALUES (?, ?, ?)',
+        (task_id, 'user', content)
+    )
+    db.commit()
+    
+    # Auto-reply from "requester" for demo
+    import time
+    replies = [
+        "Thanks for accepting! When can you start?",
+        "Great, I'll be available anytime this weekend.",
+        "Sounds good! Let me know if you need any details.",
+        "Perfect. My address is 123 Main St. See you soon!",
+        "Thanks for the update! Looking forward to it.",
+    ]
+    reply = random.choice(replies)
+    db.execute(
+        'INSERT INTO direct_messages (task_id, sender, content) VALUES (?, ?, ?)',
+        (task_id, 'requester', reply)
+    )
+    db.commit()
+    
+    return jsonify({'success': True, 'reply': reply})
 
 @app.route('/logout')
 def logout():

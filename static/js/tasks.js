@@ -4,7 +4,7 @@ function deleteTask(taskId) {
         return;
     }
 
-    fetch(`/api/delete_task/${taskId}`, {
+    fetch(`/api/delete_db_task/${taskId}`, {
         method: 'DELETE',
     })
         .then(response => {
@@ -22,6 +22,7 @@ function deleteTask(taskId) {
         })
         .catch(error => console.error('Error:', error));
 }
+
 
 // Function to calculate distance between two coordinates in km
 function calculateDistance(lat1, lon1, lat2, lon2) {

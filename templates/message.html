@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Messages - Find a Helper</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css', v=1) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/message.css', v=1) }}">
 </head>
@@ -20,6 +20,41 @@
         </ul>
     </nav>
 
+    <div class="msg-container">
+        <!-- Sidebar: conversation list -->
+        <aside class="msg-sidebar">
+            <div class="sidebar-header">
+                <h2>Messages</h2>
+            </div>
+            <div id="conversation-list" class="conversation-list">
+                <!-- Conversations loaded dynamically -->
+            </div>
+        </aside>
+
+        <!-- Chat area -->
+        <main class="msg-chat">
+            <div id="chat-placeholder" class="chat-placeholder">
+                <p>Select a conversation to start messaging</p>
+            </div>
+            <div id="chat-active" class="chat-active" style="display:none;">
+                <div class="chat-top-bar">
+                    <div class="chat-top-info">
+                        <h3 id="chat-task-title"></h3>
+                        <span id="chat-task-reward" class="chat-reward-badge"></span>
+                    </div>
+                </div>
+                <div id="chat-thread" class="chat-thread">
+                    <!-- Messages loaded dynamically -->
+                </div>
+                <div class="chat-input-bar">
+                    <input type="text" id="msg-input" placeholder="Type a message..." autocomplete="off" />
+                    <button id="msg-send-btn">Send</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/message.js') }}"></script>
 </body>
 
 </html>
