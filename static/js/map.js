@@ -39,8 +39,17 @@ function loadNearbyTasks(latlng) {
                 var distance = myLocation.distanceTo(taskLatLng);
                 var distanceKm = (distance / 1000).toFixed(2);
 
+                // Match Score Badge
+                let matchBadge = '';
+                if (task.match_score && task.match_score >= 60) {
+                    const badgeBg = task.match_color === 'purple' ? 'linear-gradient(135deg, #6fd 0%, #9370DB 100%)' : '#FFA500';
+                    const badgeStyle = `background:${badgeBg};color:white;padding:4px 10px;border-radius:12px;display:inline-block;font-size:0.85rem;font-weight:bold;margin-bottom:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);`;
+                    matchBadge = `<div style="${badgeStyle}">${task.match_score}% Match</div>`;
+                }
+
                 var popupContent = `
                     <div class="task-popup">
+                        ${matchBadge}
                         <h3>${task.title}</h3>
                         <p><strong>Description:</strong> ${task.description}</p>
                         <p><strong>Reward:</strong> $${task.reward}</p>
@@ -54,10 +63,28 @@ function loadNearbyTasks(latlng) {
                 `;
 
                 const isCustom = task.is_custom === true;
-                const markerColor = isCustom ? 'green' : 'red';
-                const fillColor = isCustom ? '#32CD32' : '#f03'; // LimeGreen or standard red
-                const fillOpacity = isCustom ? 0.8 : 0.5;
-                const radius = isCustom ? 12 : 10;
+
+                // Determine marker style
+                let markerColor = 'red';
+                let fillColor = '#f03';
+                let fillOpacity = 0.5;
+                let radius = 10;
+
+                if (isCustom) {
+                    markerColor = 'green';
+                    fillColor = '#32CD32';
+                    fillOpacity = 0.8;
+                    radius = 12;
+                } else if (task.match_color === 'purple') {
+                    markerColor = 'purple';
+                    fillColor = '#8A2BE2'; // BlueViolet
+                    fillOpacity = 0.7;
+                    radius = 11;
+                } else if (task.match_color === 'orange') {
+                    markerColor = 'orange';
+                    fillColor = '#FFA500';
+                    fillOpacity = 0.6;
+                }
 
                 var marker = L.circleMarker([task.lat, task.lng], {
                     color: markerColor,

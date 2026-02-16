@@ -315,6 +315,40 @@ def delete_task_frontend():
         # Currently we assume only custom tasks (ID > 10000) are deletable via this button
         return jsonify({'error': 'Cannot delete system tasks'}), 400
 
+def calculate_match_score(user_expertise, task_title, task_desc):
+    """
+    Calculate a 'smart' match score (0-100) based on user expertise and task content.
+    """
+    if not user_expertise:
+        return 0, 'default'
+        
+    expertise_list = [e.strip().lower() for e in user_expertise.split(',')]
+    text = (task_title + " " + task_desc).lower()
+    
+    score = 0
+    matches = 0
+    
+    for skill in expertise_list:
+        if skill and skill in text:
+            matches += 1
+            score += 40 # Big boost for direct keyword match
+            
+    # Add some randomness for "AI" feel and base score
+    import random
+    base_affinity = random.randint(30, 60) 
+    score += base_affinity
+    
+    # Cap at 99
+    score = min(99, score)
+    
+    # Determine color/tier
+    if score >= 85:
+        return score, 'purple' # High match
+    elif score >= 60:
+        return score, 'orange' # Medium match
+    else:
+        return score, 'default' # Low match
+
 @app.route('/api/nearby')
 def get_nearby_data():
     try:
@@ -329,6 +363,14 @@ def get_nearby_data():
     db = get_db()
     cur = db.execute('SELECT original_id FROM tasks WHERE original_id IS NOT NULL')
     accepted_ids = {row['original_id'] for row in cur.fetchall()}
+    
+    # Get current user's expertise
+    user_id = session.get('user_id')
+    user_expertise = ""
+    if user_id:
+        user = db.execute('SELECT expertise FROM users WHERE id = ?', (user_id,)).fetchone()
+        if user:
+            user_expertise = user['expertise']
 
     # 1. Fetch user-posted tasks from DB (status='posted')
     cur = db.execute("SELECT * FROM tasks WHERE status = 'posted'")
@@ -341,7 +383,9 @@ def get_nearby_data():
             'reward': row['reward'],
             'lat': row['lat'],
             'lng': row['lng'],
-            'is_custom': True
+            'is_custom': True,
+            'match_score': 100, # Own tasks are perfect match? Or just distinct.
+            'match_color': 'green'
         })
 
     # 2. Add Dummy Tasks
@@ -366,6 +410,9 @@ def get_nearby_data():
         # Deterministic offset within ~2km
         offset_lat = rng.uniform(-0.02, 0.02)
         offset_lng = rng.uniform(-0.02, 0.02)
+        
+        # Calculate AI Match Score
+        score, color = calculate_match_score(user_expertise, template["title"], template["desc"])
 
         tasks.append({
             "id": i + 1,
@@ -374,7 +421,9 @@ def get_nearby_data():
             "description": template["desc"],
             "lat": lat + offset_lat,
             "lng": lng + offset_lng,
-            "type": "task"
+            "type": "task",
+            "match_score": score,
+            "match_color": color
         })
 
     return jsonify({'tasks': tasks})

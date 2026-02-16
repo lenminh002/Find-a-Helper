@@ -27,10 +27,16 @@
     - **How to Use**:
         - Example: "I need help moving a couch this Saturday"
         - AI will create a task with title, description, reward and will ask for more information if needed before posting.
+
+- Smart match score between helper's expertise and task
+    - High Match: Purple color
+    - Medium Match: Orange color
+    - Low Match: Red color
     
 Future updates / Ideas:
 - AI Profile Optimizer
 - Safety & Content Moderation
 - Multilingual Translation & Support
+
 
 
